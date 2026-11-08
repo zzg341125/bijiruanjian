@@ -1,0 +1,849 @@
+package io.github.latticenotes.ui
+
+import android.content.Intent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.List
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.latticenotes.data.FolderEntity
+import io.github.latticenotes.data.NoteEntity
+import io.github.latticenotes.data.NoteFormat
+import io.github.latticenotes.data.NotesRepository
+import io.github.latticenotes.util.formatTimestamp
+import io.github.latticenotes.util.notePreview
+import kotlinx.coroutines.launch
+
+private enum class NoteView {
+    ALL,
+    STARRED,
+    TRASH,
+    FOLDER,
+}
+
+private enum class NoteSort {
+    UPDATED,
+    CREATED,
+    TITLE,
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HomeScreen(
+    repository: NotesRepository,
+    initialSearch: Boolean,
+    onSearchConsumed: () -> Unit,
+    onCreateNote: (Long?) -> Unit,
+    onOpenNote: (Long) -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenKnowledge: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val notes by repository.observeNotes().collectAsStateWithLifecycle(emptyList())
+    val folders by repository.observeFolders().collectAsStateWithLifecycle(emptyList())
+
+    var view by remember { mutableStateOf(NoteView.ALL) }
+    var selectedFolder by remember { mutableStateOf<FolderEntity?>(null) }
+    var sort by remember { mutableStateOf(NoteSort.UPDATED) }
+    var searching by remember { mutableStateOf(initialSearch) }
+    var query by remember { mutableStateOf("") }
+    var appMenuOpen by remember { mutableStateOf(false) }
+    var sortMenuOpen by remember { mutableStateOf(false) }
+    var folderDialogOpen by remember { mutableStateOf(false) }
+    var editFolder by remember { mutableStateOf<FolderEntity?>(null) }
+    var moveNote by remember { mutableStateOf<NoteEntity?>(null) }
+    var tagNote by remember { mutableStateOf<NoteEntity?>(null) }
+    var deleteNote by remember { mutableStateOf<NoteEntity?>(null) }
+
+    LaunchedEffect(initialSearch) {
+        if (initialSearch) {
+            searching = true
+            onSearchConsumed()
+        }
+    }
+
+    val filtered = remember(notes, view, selectedFolder, query, sort) {
+        notes.asSequence()
+            .filter { note ->
+                when (view) {
+                    NoteView.ALL -> !note.trashed
+                    NoteView.STARRED -> !note.trashed && note.starred
+                    NoteView.TRASH -> note.trashed
+                    NoteView.FOLDER -> !note.trashed && note.folderId == selectedFolder?.id
+                }
+            }
+            .filter { note ->
+                query.isBlank() ||
+                    note.title.contains(query, ignoreCase = true) ||
+                    note.body.contains(query, ignoreCase = true) ||
+                    note.tags.contains(query, ignoreCase = true)
+            }
+            .let { sequence ->
+                when (sort) {
+                    NoteSort.UPDATED -> sequence.sortedWith(
+                        compareByDescending<NoteEntity> { it.pinned }.thenByDescending { it.updatedAt },
+                    )
+                    NoteSort.CREATED -> sequence.sortedWith(
+                        compareByDescending<NoteEntity> { it.pinned }.thenByDescending { it.createdAt },
+                    )
+                    NoteSort.TITLE -> sequence.sortedWith(
+                        compareByDescending<NoteEntity> { it.pinned }
+                            .thenBy { it.title.lowercase().ifBlank { "untitled" } },
+                    )
+                }
+            }
+            .toList()
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Outlined.Settings, contentDescription = "设置")
+                    }
+                },
+                title = {
+                    Text(
+                        text = when (view) {
+                            NoteView.ALL -> "格栅笔记"
+                            NoteView.STARRED -> "加星笔记"
+                            NoteView.TRASH -> "回收站"
+                            NoteView.FOLDER -> selectedFolder?.name ?: "文件夹"
+                        },
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                },
+                actions = {
+                    IconButton(onClick = { searching = !searching }) {
+                        Icon(
+                            if (searching) Icons.Outlined.Close else Icons.Outlined.Search,
+                            contentDescription = if (searching) "关闭搜索" else "搜索",
+                        )
+                    }
+                    IconButton(onClick = onOpenKnowledge) {
+                        Icon(Icons.Outlined.Info, contentDescription = "本地知识检索")
+                    }
+                    Box {
+                        IconButton(onClick = { appMenuOpen = true }) {
+                            Icon(Icons.Outlined.MoreVert, contentDescription = "更多")
+                        }
+                        DropdownMenu(
+                            expanded = appMenuOpen,
+                            onDismissRequest = { appMenuOpen = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("新建文件夹") },
+                                leadingIcon = { Icon(Icons.Outlined.List, null) },
+                                onClick = {
+                                    appMenuOpen = false
+                                    editFolder = null
+                                    folderDialogOpen = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("管理文件夹") },
+                                leadingIcon = { Icon(Icons.Outlined.List, null) },
+                                onClick = {
+                                    appMenuOpen = false
+                                    selectedFolder = null
+                                    view = NoteView.ALL
+                                    editFolder = null
+                                    folderDialogOpen = true
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("排序") },
+                                onClick = {
+                                    appMenuOpen = false
+                                    sortMenuOpen = true
+                                },
+                            )
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
+            )
+        },
+        floatingActionButton = {
+            if (view != NoteView.TRASH) {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        onCreateNote(selectedFolder?.id.takeIf { view == NoteView.FOLDER })
+                    },
+                    icon = { Icon(Icons.Outlined.Add, null) },
+                    text = { Text("新建") },
+                )
+            }
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+        ) {
+            if (searching) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    placeholder = { Text("搜索标题、正文或标签") },
+                    leadingIcon = { Icon(Icons.Outlined.Search, null) },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(Icons.Outlined.Close, "清空")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { searching = false }),
+                )
+            }
+
+            LazyRow(
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                item {
+                    FilterChip(
+                        selected = view == NoteView.ALL,
+                        onClick = { view = NoteView.ALL },
+                        label = { Text("全部") },
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = view == NoteView.STARRED,
+                        onClick = { view = NoteView.STARRED },
+                        label = { Text("加星") },
+                        leadingIcon = { Icon(Icons.Outlined.Star, null, Modifier.size(18.dp)) },
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = view == NoteView.TRASH,
+                        onClick = { view = NoteView.TRASH },
+                        label = { Text("回收站") },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, null, Modifier.size(18.dp)) },
+                    )
+                }
+                items(folders, key = { it.id }) { folder ->
+                    FilterChip(
+                        selected = view == NoteView.FOLDER && selectedFolder?.id == folder.id,
+                        onClick = {
+                            selectedFolder = folder
+                            view = NoteView.FOLDER
+                        },
+                        label = { Text(folder.name) },
+                        leadingIcon = {
+                            Box(
+                                Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(folder.color)),
+                            )
+                        },
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+            ) {
+                if (filtered.isEmpty()) {
+                    EmptyNotes(
+                        isSearching = query.isNotBlank() || searching,
+                        isTrash = view == NoteView.TRASH,
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            top = 12.dp,
+                            bottom = 96.dp,
+                        ),
+                    ) {
+                        items(filtered, key = { it.id }) { note ->
+                            NoteCard(
+                                note = note,
+                                folder = folders.firstOrNull { it.id == note.folderId },
+                                trashed = view == NoteView.TRASH,
+                                onClick = {
+                                    if (view == NoteView.TRASH) {
+                                        scope.launch { repository.restore(note.id) }
+                                    } else {
+                                        onOpenNote(note.id)
+                                    }
+                                },
+                                onTogglePin = {
+                                    scope.launch { repository.setPinned(note.id, !note.pinned) }
+                                },
+                                onToggleStar = {
+                                    scope.launch { repository.setStarred(note.id, !note.starred) }
+                                },
+                                onDelete = {
+                                    if (view == NoteView.TRASH) deleteNote = note
+                                    else scope.launch { repository.moveToTrash(note.id) }
+                                },
+                                onRestore = { scope.launch { repository.restore(note.id) } },
+                                onFolder = { moveNote = note },
+                                onTags = { tagNote = note },
+                                onDuplicate = {
+                                    scope.launch {
+                                        repository.duplicateNote(note.id)?.let(onOpenNote)
+                                    }
+                                },
+                                onShare = {
+                                    val text = note.title.ifBlank { "无标题" } +
+                                        "\n\n" + note.body
+                                    context.startActivity(
+                                        Intent.createChooser(
+                                            Intent(Intent.ACTION_SEND).apply {
+                                                type = "text/plain"
+                                                putExtra(Intent.EXTRA_TEXT, text)
+                                            },
+                                            "分享笔记",
+                                        ),
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (folderDialogOpen) {
+        FolderDialog(
+            folders = folders,
+            onDismiss = { folderDialogOpen = false },
+            onCreate = {
+                scope.launch {
+                    repository.createFolder(it, 0xFF305C4A)
+                    folderDialogOpen = false
+                }
+            },
+            onRename = { folder ->
+                editFolder = folder
+            },
+            onDelete = { folder, deleteNotes ->
+                scope.launch {
+                    repository.deleteFolder(folder.id, deleteNotes)
+                    if (selectedFolder?.id == folder.id) {
+                        selectedFolder = null
+                        view = NoteView.ALL
+                    }
+                }
+            },
+        )
+    }
+    editFolder?.let { folder ->
+        RenameFolderDialog(
+            folder = folder,
+            onDismiss = { editFolder = null },
+            onRename = { name ->
+                scope.launch {
+                    repository.updateFolder(folder.id, name, folder.color)
+                    editFolder = null
+                }
+            },
+        )
+    }
+    moveNote?.let { note ->
+        AlertDialog(
+            onDismissRequest = { moveNote = null },
+            title = { Text("移动到文件夹") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(
+                        onClick = {
+                            scope.launch { repository.moveToFolder(note.id, null) }
+                            moveNote = null
+                        },
+                    ) { Text("无文件夹") }
+                    folders.forEach { folder ->
+                        TextButton(
+                            onClick = {
+                                scope.launch { repository.moveToFolder(note.id, folder.id) }
+                                moveNote = null
+                            },
+                        ) { Text(folder.name) }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { moveNote = null }) { Text("取消") }
+            },
+        )
+    }
+    tagNote?.let { note ->
+        TagDialog(
+            note = note,
+            onDismiss = { tagNote = null },
+            onSave = {
+                scope.launch { repository.setTags(note.id, it) }
+                tagNote = null
+            },
+        )
+    }
+    deleteNote?.let { note ->
+        AlertDialog(
+            onDismissRequest = { deleteNote = null },
+            title = { Text("永久删除？") },
+            text = { Text("此操作无法撤销。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch { repository.permanentlyDelete(note.id) }
+                        deleteNote = null
+                    },
+                ) { Text("永久删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteNote = null }) { Text("取消") }
+            },
+        )
+    }
+    DropdownMenu(
+        expanded = sortMenuOpen,
+        onDismissRequest = { sortMenuOpen = false },
+    ) {
+        listOf(
+            NoteSort.UPDATED to "最近修改",
+            NoteSort.CREATED to "最近创建",
+            NoteSort.TITLE to "标题",
+        ).forEach { (value, label) ->
+            DropdownMenuItem(
+                text = { Text(label) },
+                leadingIcon = {
+                    if (sort == value) Icon(Icons.Outlined.Check, null) else Spacer(Modifier.width(24.dp))
+                },
+                onClick = {
+                    sort = value
+                    sortMenuOpen = false
+                },
+            )
+        }
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun NoteCard(
+    note: NoteEntity,
+    folder: FolderEntity?,
+    trashed: Boolean,
+    onClick: () -> Unit,
+    onTogglePin: () -> Unit,
+    onToggleStar: () -> Unit,
+    onDelete: () -> Unit,
+    onRestore: () -> Unit,
+    onFolder: () -> Unit,
+    onTags: () -> Unit,
+    onDuplicate: () -> Unit,
+    onShare: () -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = { menuOpen = true },
+            ),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(note.color),
+            contentColor = Color(0xFF20231F),
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = note.title.ifBlank { "无标题" },
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (note.pinned) {
+                    Icon(
+                        Icons.Outlined.Star,
+                        contentDescription = "已置顶",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Outlined.MoreVert, "更多操作", Modifier.size(20.dp))
+                    }
+                    DropdownMenu(
+                        expanded = menuOpen,
+                        onDismissRequest = { menuOpen = false },
+                    ) {
+                        if (trashed) {
+                            DropdownMenuItem(
+                                text = { Text("恢复") },
+                                leadingIcon = { Icon(Icons.Outlined.Refresh, null) },
+                                onClick = {
+                                    menuOpen = false
+                                    onRestore()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("永久删除") },
+                                leadingIcon = { Icon(Icons.Outlined.Delete, null) },
+                                onClick = {
+                                    menuOpen = false
+                                    onDelete()
+                                },
+                            )
+                        } else {
+                            DropdownMenuItem(
+                                text = { Text(if (note.pinned) "取消置顶" else "置顶") },
+                                leadingIcon = { Icon(Icons.Outlined.Star, null) },
+                                onClick = {
+                                    menuOpen = false
+                                    onTogglePin()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (note.starred) "取消加星" else "加星") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Outlined.Star,
+                                        null,
+                                    )
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    onToggleStar()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("移动文件夹") },
+                                leadingIcon = { Icon(Icons.Outlined.List, null) },
+                                onClick = {
+                                    menuOpen = false
+                                    onFolder()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("标签") },
+                                leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+                                onClick = {
+                                    menuOpen = false
+                                    onTags()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("创建副本") },
+                                leadingIcon = { Icon(Icons.Outlined.Add, null) },
+                                onClick = {
+                                    menuOpen = false
+                                    onDuplicate()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("分享文本") },
+                                leadingIcon = { Icon(Icons.Outlined.Share, null) },
+                                onClick = {
+                                    menuOpen = false
+                                    onShare()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("移到回收站") },
+                                leadingIcon = { Icon(Icons.Outlined.Delete, null) },
+                                onClick = {
+                                    menuOpen = false
+                                    onDelete()
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+            val preview = notePreview(note.body)
+            if (preview.isNotBlank()) {
+                Text(
+                    text = preview,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF50554F),
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (folder != null) {
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(folder.name) },
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                note.tags.split(',').map(String::trim).filter(String::isNotBlank).take(2)
+                    .forEach { tag ->
+                        Text(
+                            text = "#$tag",
+                            modifier = Modifier.padding(end = 6.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF305C4A),
+                        )
+                    }
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = formatTimestamp(note.updatedAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF676B66),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyNotes(isSearching: Boolean, isTrash: Boolean) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = if (isTrash) Icons.Outlined.Delete else Icons.Outlined.Edit,
+                contentDescription = null,
+                modifier = Modifier.size(72.dp),
+                tint = MaterialTheme.colorScheme.outlineVariant,
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = when {
+                    isSearching -> "没有匹配的笔记"
+                    isTrash -> "回收站为空"
+                    else -> "还没有笔记"
+                },
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = if (isSearching) "换个关键词试试" else "点击右下角新建笔记",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FolderDialog(
+    folders: List<FolderEntity>,
+    onDismiss: () -> Unit,
+    onCreate: (String) -> Unit,
+    onRename: (FolderEntity) -> Unit,
+    onDelete: (FolderEntity, Boolean) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var deleting by remember { mutableStateOf<FolderEntity?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("文件夹") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(80) },
+                    label = { Text("新文件夹名称") },
+                    singleLine = true,
+                    trailingIcon = {
+                        IconButton(
+                            enabled = name.isNotBlank(),
+                            onClick = { onCreate(name.trim()) },
+                        ) { Icon(Icons.Outlined.Add, "创建") }
+                    },
+                )
+                folders.forEach { folder ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(Color(folder.color)),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(folder.name, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { onRename(folder) }) {
+                            Icon(Icons.Outlined.Edit, "重命名")
+                        }
+                        IconButton(onClick = { deleting = folder }) {
+                            Icon(Icons.Outlined.Delete, "删除")
+                        }
+                    }
+                }
+                if (folders.isEmpty()) {
+                    Text("还没有文件夹", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        },
+    )
+    deleting?.let { folder ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("删除文件夹 ${folder.name}？") },
+            text = { Text("可以选择保留其中的笔记。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete(folder, true)
+                        deleting = null
+                    },
+                ) { Text("同时删除笔记") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            onDelete(folder, false)
+                            deleting = null
+                        },
+                    ) { Text("保留笔记") }
+                    TextButton(onClick = { deleting = null }) { Text("取消") }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun RenameFolderDialog(
+    folder: FolderEntity,
+    onDismiss: () -> Unit,
+    onRename: (String) -> Unit,
+) {
+    var name by remember(folder.id) { mutableStateOf(folder.name) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("重命名文件夹") },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it.take(80) },
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            TextButton(enabled = name.isNotBlank(), onClick = { onRename(name.trim()) }) {
+                Text("保存")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
+}
+
+@Composable
+private fun TagDialog(
+    note: NoteEntity,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var tags by remember(note.id) { mutableStateOf(note.tags) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("标签") },
+        text = {
+            OutlinedTextField(
+                value = tags,
+                onValueChange = { tags = it },
+                label = { Text("使用逗号分隔") },
+                supportingText = { Text("例如：工作, 灵感, 待读") },
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(tags) }) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
+}

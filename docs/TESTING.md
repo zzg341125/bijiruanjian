@@ -1,0 +1,40 @@
+# Testing notes
+
+Tested on 2026-11-08 with:
+
+- Android emulator API 37
+- JDK 21
+- Gradle 8.9
+- Android Gradle Plugin 8.7.3
+
+## Automated checks
+
+```bash
+./gradlew testDebugUnitTest
+./gradlew lintDebug
+./gradlew assembleDebug
+./gradlew assembleRelease
+```
+
+Result:
+
+- Unit tests pass.
+- Lint: 0 errors.
+- Debug APK builds and installs.
+- Release build passes R8 minification and produces an unsigned APK.
+
+## Manual smoke test
+
+- Cold launch and empty state.
+- Create a note, title/body input, auto-save.
+- Markdown mode and preview.
+- Force-stop and relaunch: note persisted.
+- Search filters by title/body/tag.
+- Folder creation and folder chip filtering.
+- Star action and Starred view.
+- Move to Trash, Trash view, and restore.
+- Settings page opens; theme, dynamic color, font scale, PIN and backup controls render.
+- No `FATAL EXCEPTION` observed for the app process.
+
+Screenshots are stored in this directory. Test data is synthetic and contains no
+real user notes.

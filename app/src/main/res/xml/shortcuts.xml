@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_note"
+        android:shortcutId="new_note"
+        android:shortcutLongLabel="@string/new_note"
+        android:shortcutShortLabel="@string/new_note">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="io.github.latticenotes.MainActivity"
+            android:targetPackage="io.github.latticenotes">
+            <extra android:name="destination" android:value="new_note" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_search"
+        android:shortcutId="search"
+        android:shortcutLongLabel="@string/search"
+        android:shortcutShortLabel="@string/search">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="io.github.latticenotes.MainActivity"
+            android:targetPackage="io.github.latticenotes">
+            <extra android:name="destination" android:value="search" />
+        </intent>
+    </shortcut>
+</shortcuts>

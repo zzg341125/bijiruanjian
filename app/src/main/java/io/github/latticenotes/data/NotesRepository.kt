@@ -1,0 +1,160 @@
+package io.github.latticenotes.data
+
+import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
+import kotlinx.coroutines.flow.Flow
+import java.io.File
+import java.util.UUID
+
+class NotesRepository(
+    private val context: Context,
+    private val dao: NotesDao,
+) {
+    fun observeNotes(): Flow<List<NoteEntity>> = dao.observeNotes()
+
+    fun observeNote(id: Long): Flow<NoteEntity?> = dao.observeNote(id)
+
+    fun observeFolders(): Flow<List<FolderEntity>> = dao.observeFolders()
+
+    fun observeAttachments(noteId: Long): Flow<List<AttachmentEntity>> =
+        dao.observeAttachments(noteId)
+
+    suspend fun createNote(
+        title: String = "",
+        body: String = "",
+        folderId: Long? = null,
+        format: NoteFormat = NoteFormat.TEXT,
+    ): Long = dao.insert(
+        NoteEntity(
+            title = title,
+            body = body,
+            folderId = folderId,
+            format = format.name,
+        ),
+    )
+
+    suspend fun getNote(id: Long): NoteEntity? = dao.getNote(id)
+
+    suspend fun save(note: NoteEntity) {
+        dao.upsert(note.copy(updatedAt = System.currentTimeMillis()))
+    }
+
+    suspend fun duplicateNote(id: Long): Long? {
+        val source = dao.getNote(id) ?: return null
+        val now = System.currentTimeMillis()
+        return dao.insert(
+            source.copy(
+                id = 0,
+                title = source.title.ifBlank { "Untitled" } + " copy",
+                pinned = false,
+                createdAt = now,
+                updatedAt = now,
+                trashed = false,
+                deletedAt = null,
+                reminderAt = null,
+            ),
+        )
+    }
+
+    suspend fun moveToTrash(id: Long) = dao.moveToTrash(id)
+
+    suspend fun restore(id: Long) = dao.restore(id)
+
+    suspend fun permanentlyDelete(id: Long) {
+        dao.getAttachments(id).forEach { deleteAttachmentFile(it.uri) }
+        dao.delete(id)
+    }
+
+    suspend fun setPinned(id: Long, value: Boolean) = dao.setPinned(id, value)
+
+    suspend fun setStarred(id: Long, value: Boolean) = dao.setStarred(id, value)
+
+    suspend fun moveToFolder(id: Long, folderId: Long?) = dao.moveToFolder(id, folderId)
+
+    suspend fun setTags(id: Long, tags: String) = dao.setTags(id, tags)
+
+    suspend fun setReminder(id: Long, timeMillis: Long?) = dao.setReminder(id, timeMillis)
+
+    suspend fun createFolder(name: String, color: Long): Long =
+        dao.insertFolder(FolderEntity(name = name, color = color))
+
+    suspend fun updateFolder(id: Long, name: String, color: Long) =
+        dao.updateFolder(id, name, color)
+
+    suspend fun deleteFolder(id: Long, deleteNotes: Boolean) {
+        if (deleteNotes) {
+            dao.getAllForBackup()
+                .filter { it.folderId == id }
+                .forEach { permanentlyDelete(it.id) }
+        } else {
+            dao.detachNotesFromFolder(id)
+        }
+        dao.deleteFolder(id)
+    }
+
+    suspend fun addAttachment(noteId: Long, source: Uri): Long? {
+        val resolver = context.contentResolver
+        val mime = resolver.getType(source)
+        val originalName = resolver.query(
+            source,
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        } ?: "attachment"
+
+        val suffix = originalName.substringAfterLast('.', "").takeIf { it.isNotBlank() }
+        val destinationName = buildString {
+            append(UUID.randomUUID())
+            if (suffix != null) append('.').append(suffix)
+        }
+        val directory = File(context.filesDir, "attachments").apply { mkdirs() }
+        val destination = File(directory, destinationName)
+
+        val copied = runCatching {
+            resolver.openInputStream(source)?.use { input ->
+                destination.outputStream().use { output -> input.copyTo(output) }
+            } != null
+        }.getOrDefault(false)
+        if (!copied) return null
+
+        return dao.insertAttachment(
+            AttachmentEntity(
+                noteId = noteId,
+                uri = Uri.fromFile(destination).toString(),
+                name = originalName,
+                mimeType = mime,
+            ),
+        )
+    }
+
+    suspend fun removeAttachment(attachment: AttachmentEntity) {
+        deleteAttachmentFile(attachment.uri)
+        dao.deleteAttachment(attachment.id)
+    }
+
+    suspend fun search(query: String): List<NoteEntity> =
+        dao.search(query.trim(), limit = 50)
+
+    suspend fun getAllForBackup(): BackupPayload = BackupPayload(
+        notes = dao.getAllForBackup(),
+        folders = dao.getFoldersForBackup(),
+        attachments = dao.getAllAttachmentsForBackup(),
+    )
+
+    suspend fun restoreBackup(payload: BackupPayload) {
+        payload.folders.forEach { dao.insertFolder(it.copy(id = it.id)) }
+        payload.notes.forEach { dao.upsert(it) }
+        payload.attachments.forEach { dao.insertAttachment(it.copy(id = 0)) }
+    }
+
+    private fun deleteAttachmentFile(uriValue: String) {
+        runCatching {
+            val uri = Uri.parse(uriValue)
+            if (uri.scheme == "file") uri.path?.let { File(it).delete() }
+        }
+    }
+}
