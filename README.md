@@ -69,6 +69,28 @@ app/build/outputs/apk/debug/app-debug.apk
 
 当前 Release 产物为未签名包；GitHub Actions 默认构建可安装的 Debug APK。
 
+## 自动发布
+
+推送版本标签会触发 `.github/workflows/release.yml`：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。
+
+首次使用前，在 GitHub 仓库的 `Settings → Secrets and variables → Actions` 中配置：
+
+| Secret | 内容 |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | release keystore 的单行 Base64 |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore 密码 |
+| `ANDROID_KEY_ALIAS` | key alias |
+| `ANDROID_KEY_PASSWORD` | key 密码 |
+
+必须长期保存同一个 release keystore，否则后续 APK 无法覆盖安装。
+
 ## 当前边界
 
 首版没有内置云账号、付费服务或远程 AI。知识检索在设备本地执行；后续可通过独立适配器接入 WebDAV、用户自有服务器或兼容 OpenAI API 的服务。详见 [功能对照](docs/FEATURE_PARITY.md)。

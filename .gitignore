@@ -10,6 +10,8 @@ app/build/
 *.jks
 *.keystore
 keystore.properties
+release-secrets.properties
+.secrets/
 *.apk
 *.aab
 *.idsig
