@@ -6,6 +6,7 @@ import android.provider.OpenableColumns
 import kotlinx.coroutines.flow.Flow
 import java.io.File
 import java.util.UUID
+import java.util.Base64
 
 class NotesRepository(
     private val context: Context,
@@ -173,13 +174,15 @@ class NotesRepository(
     suspend fun getAllForBackup(): BackupPayload = BackupPayload(
         notes = dao.getAllForBackup(),
         folders = dao.getFoldersForBackup(),
-        attachments = dao.getAllAttachmentsForBackup(),
+        attachments = dao.getAllAttachmentsForBackup().map(::withEmbeddedData),
     )
 
     suspend fun restoreBackup(payload: BackupPayload) {
         payload.folders.forEach { dao.insertFolder(it.copy(id = it.id)) }
         payload.notes.forEach { dao.upsert(it) }
-        payload.attachments.forEach { dao.insertAttachment(it.copy(id = 0)) }
+        payload.attachments.forEach {
+            dao.insertAttachment(materializeAttachment(it).copy(id = 0))
+        }
     }
 
     suspend fun mergeBackup(payload: BackupPayload) {
@@ -197,13 +200,54 @@ class NotesRepository(
         }
 
         val existingAttachments = dao.getAllAttachmentsForBackup()
-            .map { "${it.noteId}:${it.name}:${it.uri}" }
+            .map { "${it.noteId}:${it.name}" }
             .toSet()
         val mergedNoteIds = dao.getAllForBackup().map { it.id }.toSet()
         payload.attachments
             .filter { it.noteId in mergedNoteIds }
-            .filter { "${it.noteId}:${it.name}:${it.uri}" !in existingAttachments }
-            .forEach { dao.insertAttachment(it.copy(id = 0)) }
+            .filter { "${it.noteId}:${it.name}" !in existingAttachments }
+            .forEach {
+                dao.insertAttachment(materializeAttachment(it).copy(id = 0))
+            }
+    }
+
+    suspend fun getAttachmentsForExport(noteId: Long): List<AttachmentEntity> =
+        dao.getAttachments(noteId).map(::withEmbeddedData)
+
+    private fun withEmbeddedData(attachment: AttachmentEntity): AttachmentEntity {
+        if (attachment.embeddedData != null) return attachment
+        return runCatching {
+            val uri = Uri.parse(attachment.uri)
+            if (uri.scheme != "file") return@runCatching attachment
+            val file = File(uri.path ?: return@runCatching attachment)
+            if (!file.isFile || file.length() > MAX_EMBEDDED_ATTACHMENT_BYTES) {
+                return@runCatching attachment
+            }
+            attachment.copy().apply {
+                embeddedData = Base64.getEncoder().encodeToString(file.readBytes())
+            }
+        }.getOrDefault(attachment)
+    }
+
+    private fun materializeAttachment(attachment: AttachmentEntity): AttachmentEntity {
+        val encoded = attachment.embeddedData ?: return attachment
+        return runCatching {
+            val bytes = Base64.getDecoder().decode(encoded)
+            require(bytes.size <= MAX_EMBEDDED_ATTACHMENT_BYTES)
+            val directory = File(context.filesDir, "attachments").apply { mkdirs() }
+            val suffix = attachment.name.substringAfterLast('.', "")
+            val file = File(
+                directory,
+                buildString {
+                    append(UUID.randomUUID())
+                    if (suffix.isNotBlank()) append('.').append(suffix)
+                },
+            )
+            file.writeBytes(bytes)
+            attachment.copy(uri = Uri.fromFile(file).toString()).apply {
+                embeddedData = encoded
+            }
+        }.getOrDefault(attachment)
     }
 
     private fun deleteAttachmentFile(uriValue: String) {
@@ -215,5 +259,6 @@ class NotesRepository(
 
     companion object {
         private const val MAX_IMPORT_CHARS = 2_000_000
+        private const val MAX_EMBEDDED_ATTACHMENT_BYTES = 30L * 1024 * 1024
     }
 }

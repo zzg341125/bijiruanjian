@@ -30,7 +30,7 @@ class BackupManagerTest {
                     uri = "file:///tmp/image.png",
                     name = "image.png",
                     mimeType = "image/png",
-                ),
+                ).apply { embeddedData = "aGVsbG8=" },
             ),
         )
 
@@ -40,6 +40,7 @@ class BackupManagerTest {
         assertEquals("work,release", decoded.notes.single().tags)
         assertEquals("Work", decoded.folders.single().name)
         assertEquals("image.png", decoded.attachments.single().name)
+        assertEquals("aGVsbG8=", decoded.attachments.single().embeddedData)
         assertTrue(decoded.notes.single().starred)
     }
 }

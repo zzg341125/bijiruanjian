@@ -71,6 +71,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.latticenotes.data.FolderEntity
@@ -121,8 +123,8 @@ fun HomeScreen(
     var view by remember { mutableStateOf(NoteView.ALL) }
     var selectedFolder by remember { mutableStateOf<FolderEntity?>(null) }
     var sort by remember { mutableStateOf(NoteSort.UPDATED) }
-    var searching by remember { mutableStateOf(initialSearch) }
     var query by remember { mutableStateOf("") }
+    val searchFocus = remember { FocusRequester() }
     var appMenuOpen by remember { mutableStateOf(false) }
     var sortMenuOpen by remember { mutableStateOf(false) }
     var folderDialogOpen by remember { mutableStateOf(false) }
@@ -133,7 +135,7 @@ fun HomeScreen(
 
     LaunchedEffect(initialSearch) {
         if (initialSearch) {
-            searching = true
+            searchFocus.requestFocus()
             onSearchConsumed()
         }
     }
@@ -191,12 +193,6 @@ fun HomeScreen(
                     )
                 },
                 actions = {
-                    IconButton(onClick = { searching = !searching }) {
-                        Icon(
-                            if (searching) Icons.Outlined.Close else Icons.Outlined.Search,
-                            contentDescription = if (searching) "关闭搜索" else "搜索",
-                        )
-                    }
                     IconButton(onClick = onOpenKnowledge) {
                         Icon(Icons.Outlined.Info, contentDescription = "本地知识检索")
                     }
@@ -278,27 +274,25 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            if (searching) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                    placeholder = { Text("搜索标题、正文或标签") },
-                    leadingIcon = { Icon(Icons.Outlined.Search, null) },
-                    trailingIcon = {
-                        if (query.isNotEmpty()) {
-                            IconButton(onClick = { query = "" }) {
-                                Icon(Icons.Outlined.Close, "清空")
-                            }
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .focusRequester(searchFocus),
+                placeholder = { Text("搜索标题、正文或标签") },
+                leadingIcon = { Icon(Icons.Outlined.Search, null) },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { query = "" }) {
+                            Icon(Icons.Outlined.Close, "清空")
                         }
-                    },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { searching = false }),
-                )
-            }
+                    }
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            )
 
             LazyRow(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
@@ -354,7 +348,7 @@ fun HomeScreen(
             ) {
                 if (filtered.isEmpty()) {
                     EmptyNotes(
-                        isSearching = query.isNotBlank() || searching,
+                        isSearching = query.isNotBlank(),
                         isTrash = view == NoteView.TRASH,
                     )
                 } else {

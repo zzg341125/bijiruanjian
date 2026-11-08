@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -73,6 +74,7 @@ import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import io.github.latticenotes.backup.SingleFileExporter
 import io.github.latticenotes.data.AttachmentEntity
 import io.github.latticenotes.data.NoteFormat
 import io.github.latticenotes.data.NotesRepository
@@ -109,6 +111,7 @@ fun EditorScreen(
     var tagDialog by remember { mutableStateOf(false) }
     var deleteConfirm by remember { mutableStateOf(false) }
     var attachmentToDelete by remember { mutableStateOf<AttachmentEntity?>(null) }
+    val history = remember(noteId) { EditorHistory() }
 
     LaunchedEffect(note) {
         val value = note ?: return@LaunchedEffect
@@ -141,6 +144,32 @@ fun EditorScreen(
         }
     }
 
+    fun setTitleWithHistory(value: String) {
+        if (value == title) return
+        history.record(EditorTextSnapshot(title, body))
+        title = value
+    }
+
+    fun setBodyWithHistory(value: String) {
+        if (value == body) return
+        history.record(EditorTextSnapshot(title, body))
+        body = value
+    }
+
+    fun undo() {
+        if (!history.canUndo) return
+        val previous = history.undo(EditorTextSnapshot(title, body)) ?: return
+        title = previous.title
+        body = previous.body
+    }
+
+    fun redo() {
+        if (!history.canRedo) return
+        val next = history.redo(EditorTextSnapshot(title, body)) ?: return
+        title = next.title
+        body = next.body
+    }
+
     fun goBack() {
         saveNow()
         onBack()
@@ -153,6 +182,26 @@ fun EditorScreen(
     ) { uris ->
         scope.launch {
             uris.forEach { repository.addAttachment(noteId, it) }
+        }
+    }
+    val singleFileExporter = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/html"),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                runCatching {
+                    val exportedAttachments = repository.getAttachmentsForExport(noteId)
+                    val html = SingleFileExporter.toHtml(title, body, exportedAttachments)
+                    context.contentResolver.openOutputStream(uri)
+                        ?.bufferedWriter()
+                        ?.use { it.write(html) }
+                        ?: error("无法写入导出文件")
+                }.onSuccess {
+                    Toast.makeText(context, "单文件 HTML 已导出", Toast.LENGTH_SHORT).show()
+                }.onFailure {
+                    Toast.makeText(context, "导出失败：${it.message}", Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
     val notificationPermission = rememberLauncherForActivityResult(
@@ -176,6 +225,12 @@ fun EditorScreen(
                     )
                 },
                 actions = {
+                    TextButton(onClick = ::undo, enabled = history.canUndo) {
+                        Text("↶", style = MaterialTheme.typography.titleLarge)
+                    }
+                    TextButton(onClick = ::redo, enabled = history.canRedo) {
+                        Text("↷", style = MaterialTheme.typography.titleLarge)
+                    }
                     TextButton(onClick = { preview = !preview }) {
                         Text(if (preview) "编辑" else "预览")
                     }
@@ -327,6 +382,16 @@ fun EditorScreen(
                                 },
                             )
                             DropdownMenuItem(
+                                text = { Text("导出单文件 HTML") },
+                                leadingIcon = { Icon(Icons.Outlined.Share, null) },
+                                onClick = {
+                                    menuOpen = false
+                                    singleFileExporter.launch(
+                                        "${title.ifBlank { "曲阳便签" }}.html",
+                                    )
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("移到回收站") },
                                 leadingIcon = { Icon(Icons.Outlined.Delete, null) },
                                 onClick = {
@@ -354,7 +419,7 @@ fun EditorScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 18.dp),
+                    .padding(start = 54.dp, end = 18.dp),
             ) {
                 Row(
                     modifier = Modifier
@@ -391,7 +456,7 @@ fun EditorScreen(
                 if (!preview) {
                     TextField(
                         value = title,
-                        onValueChange = { title = it },
+                        onValueChange = ::setTitleWithHistory,
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("标题", style = MaterialTheme.typography.headlineMedium) },
                         textStyle = MaterialTheme.typography.headlineMedium.copy(
@@ -407,7 +472,7 @@ fun EditorScreen(
                     )
                     TextField(
                         value = body,
-                        onValueChange = { body = it },
+                        onValueChange = ::setBodyWithHistory,
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
@@ -441,12 +506,12 @@ fun EditorScreen(
                 if (format != NoteFormat.TEXT && !preview) {
                     FormattingBar(
                         onInsert = { prefix, suffix, multiline ->
-                            body = if (multiline) {
+                            setBodyWithHistory(if (multiline) {
                                 if (body.isBlank() || body.endsWith('\n')) "$body$prefix"
                                 else "$body\n$prefix"
                             } else {
                                 "$body$prefix${suffix.orEmpty()}"
-                            }
+                            })
                         },
                     )
                 }

@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import androidx.room.Ignore
 
 enum class NoteFormat {
     TEXT,
@@ -56,7 +57,10 @@ data class AttachmentEntity(
     val name: String,
     val mimeType: String?,
     val createdAt: Long = System.currentTimeMillis(),
-)
+) {
+    @Ignore
+    var embeddedData: String? = null
+}
 
 data class BackupPayload(
     val notes: List<NoteEntity>,

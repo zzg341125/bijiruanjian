@@ -46,6 +46,9 @@ object BackupManager {
                                 put("name", attachment.name)
                                 put("mimeType", attachment.mimeType)
                                 put("createdAt", attachment.createdAt)
+                                if (attachment.embeddedData != null) {
+                                    put("embeddedData", attachment.embeddedData)
+                                }
                             },
                         )
                     }
@@ -93,7 +96,9 @@ object BackupManager {
                     name = item.optString("name", "attachment"),
                     mimeType = item.optString("mimeType").ifBlank { null },
                     createdAt = item.optLong("createdAt", System.currentTimeMillis()),
-                )
+                ).apply {
+                    embeddedData = item.optString("embeddedData").ifBlank { null }
+                }
             }
         return BackupPayload(notes, folders, attachments)
     }

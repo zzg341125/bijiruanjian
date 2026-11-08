@@ -28,6 +28,9 @@ account services, or paid backend behavior.
 | WebDAV online backup and restore | Yes |
 | Direct Markdown import | Yes |
 | Ruled paper editor | Yes |
+| Fixed home search | Yes |
+| Undo and redo history | Yes |
+| Self-contained HTML export | Yes |
 | Incoming text share | Yes |
 | App shortcuts | Yes |
 

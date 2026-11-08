@@ -14,10 +14,14 @@
 
 - 普通文本、Markdown、待办三种便签模式
 - 标题、正文、标签、文件夹和自动保存
+- 主页固定搜索框
+- 编辑器撤销/重做历史
 - 全部、加星、文件夹、回收站视图
 - 置顶、加星、软删除、恢复和永久删除
 - 标题与正文搜索，本地知识检索
 - 图片及任意文档附件
+- 图片附件可嵌入 WebDAV/JSON 备份
+- 导出正文、图片和内置图标合并的单文件 HTML
 - 直接批量导入 `.md` 文件
 - WebDAV 在线备份、恢复与启动自动同步
 - 笔记提醒与系统通知
@@ -76,8 +80,8 @@ app/build/outputs/apk/debug/app-debug.apk
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.2.1
+git push origin v0.2.1
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。
