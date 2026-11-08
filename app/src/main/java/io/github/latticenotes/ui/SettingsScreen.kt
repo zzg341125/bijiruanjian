@@ -33,6 +33,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,9 +46,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import io.github.latticenotes.backup.BackupManager
 import io.github.latticenotes.data.AppSettings
+import io.github.latticenotes.data.CredentialVault
 import io.github.latticenotes.data.NoteFormat
 import io.github.latticenotes.data.NotesRepository
 import io.github.latticenotes.data.SettingsRepository
+import io.github.latticenotes.data.WebDavClient
+import io.github.latticenotes.data.WebDavConfig
 import io.github.latticenotes.util.PinHasher
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
@@ -58,6 +62,7 @@ import java.time.format.DateTimeFormatter
 fun SettingsScreen(
     repository: NotesRepository,
     settingsRepository: SettingsRepository,
+    credentialVault: CredentialVault,
     settings: AppSettings,
     onBack: () -> Unit,
 ) {
@@ -66,6 +71,8 @@ fun SettingsScreen(
     val snackbar = remember { SnackbarHostState() }
     var pinDialog by remember { mutableStateOf(false) }
     var disablePinDialog by remember { mutableStateOf(false) }
+    var webDavDialog by remember { mutableStateOf(false) }
+    var webDavRestoreDialog by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
@@ -96,6 +103,20 @@ fun SettingsScreen(
             }
         }
     }
+    val markdownLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        scope.launch {
+            val count = uris.mapNotNull { repository.importMarkdown(it) }.size
+            snackbar.showSnackbar("已导入 $count 个 Markdown 文件")
+        }
+    }
+
+    fun webDavConfig(): WebDavConfig = WebDavConfig(
+        fileUrl = settings.webDavUrl,
+        username = settings.webDavUsername,
+        password = credentialVault.loadWebDavPassword(),
+    )
 
     Scaffold(
         topBar = {
@@ -106,6 +127,11 @@ fun SettingsScreen(
                     }
                 },
                 title = { Text("设置") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -137,20 +163,6 @@ fun SettingsScreen(
                         Text(label, modifier = Modifier.padding(top = 12.dp))
                     }
                 }
-            }
-            item {
-                ListItem(
-                    headlineContent = { Text("动态取色") },
-                    supportingContent = { Text("Android 12 及以上跟随系统壁纸") },
-                    trailingContent = {
-                        Switch(
-                            checked = settings.dynamicColor,
-                            onCheckedChange = {
-                                scope.launch { settingsRepository.setDynamicColor(it) }
-                            },
-                        )
-                    },
-                )
             }
             item {
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
@@ -198,6 +210,23 @@ fun SettingsScreen(
                     }
                 }
             }
+            item {
+                ListItem(
+                    leadingContent = { Icon(Icons.Outlined.Add, null) },
+                    headlineContent = { Text("导入 Markdown 文件") },
+                    supportingContent = { Text("可一次选择多个 .md 文件，文件名作为标题") },
+                    modifier = Modifier.clickableItem {
+                        markdownLauncher.launch(
+                            arrayOf(
+                                "text/markdown",
+                                "text/x-markdown",
+                                "text/plain",
+                                "application/octet-stream",
+                            ),
+                        )
+                    },
+                )
+            }
             item { HorizontalDivider(Modifier.padding(vertical = 10.dp)) }
             item {
                 ListItem(
@@ -238,11 +267,91 @@ fun SettingsScreen(
                     },
                 )
             }
+            item {
+                Text(
+                    "WebDAV 在线备份",
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            item {
+                ListItem(
+                    leadingContent = { Icon(Icons.Outlined.Add, null) },
+                    headlineContent = { Text("配置 WebDAV") },
+                    supportingContent = {
+                        Text(
+                            if (settings.webDavUrl.isBlank()) {
+                                "尚未配置备份文件地址"
+                            } else {
+                                settings.webDavUrl
+                            },
+                        )
+                    },
+                    modifier = Modifier.clickableItem { webDavDialog = true },
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text("每次启动自动同步") },
+                    supportingContent = {
+                        Text("拉取较新远端笔记，再上传合并后的本地备份")
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.webDavAutoSync,
+                            onCheckedChange = {
+                                scope.launch { settingsRepository.setWebDavAutoSync(it) }
+                            },
+                        )
+                    },
+                )
+            }
+            item {
+                ListItem(
+                    leadingContent = { Icon(Icons.Outlined.Refresh, null) },
+                    headlineContent = { Text("测试 WebDAV 连接") },
+                    supportingContent = { Text("建议先测试配置，再上传或恢复") },
+                    modifier = Modifier.clickableItem {
+                        scope.launch {
+                            runCatching { WebDavClient(webDavConfig()).testConnection() }
+                                .onSuccess { snackbar.showSnackbar("WebDAV 连接成功") }
+                                .onFailure {
+                                    snackbar.showSnackbar("连接失败：${it.message}")
+                                }
+                        }
+                    },
+                )
+            }
+            item {
+                ListItem(
+                    leadingContent = { Icon(Icons.Outlined.Refresh, null) },
+                    headlineContent = { Text("立即上传在线备份") },
+                    supportingContent = { Text("上传笔记、文件夹及附件索引 JSON") },
+                    modifier = Modifier.clickableItem {
+                        scope.launch {
+                            runCatching {
+                                val payload = repository.getAllForBackup()
+                                WebDavClient(webDavConfig()).upload(BackupManager.encode(payload))
+                            }.onSuccess { snackbar.showSnackbar("WebDAV 备份已上传") }
+                                .onFailure { snackbar.showSnackbar("上传失败：${it.message}") }
+                        }
+                    },
+                )
+            }
+            item {
+                ListItem(
+                    leadingContent = { Icon(Icons.Outlined.Refresh, null) },
+                    headlineContent = { Text("从 WebDAV 恢复") },
+                    supportingContent = { Text("按备份中的笔记 ID 合并并覆盖同名笔记") },
+                    modifier = Modifier.clickableItem { webDavRestoreDialog = true },
+                )
+            }
             item { HorizontalDivider(Modifier.padding(vertical = 10.dp)) }
             item {
                 ListItem(
                     leadingContent = { Icon(Icons.Outlined.Info, null) },
-                    headlineContent = { Text("Lattice Notes 0.1.0") },
+                    headlineContent = { Text("曲阳便签 0.2.0") },
                     supportingContent = { Text("MIT License · 本地优先 · 无广告") },
                 )
             }
@@ -282,6 +391,117 @@ fun SettingsScreen(
             },
         )
     }
+    if (webDavDialog) {
+        WebDavConfigDialog(
+            initialUrl = settings.webDavUrl,
+            initialUsername = settings.webDavUsername,
+            passwordConfigured = credentialVault.hasWebDavPassword(),
+            onDismiss = { webDavDialog = false },
+            onSave = { url, username, password ->
+                scope.launch {
+                    settingsRepository.setWebDav(url, username)
+                    credentialVault.saveWebDavPassword(password)
+                    webDavDialog = false
+                    snackbar.showSnackbar("WebDAV 配置已保存")
+                }
+            },
+            onClear = {
+                scope.launch {
+                    settingsRepository.clearWebDav()
+                    credentialVault.clearWebDavPassword()
+                    webDavDialog = false
+                    snackbar.showSnackbar("WebDAV 配置已清除")
+                }
+            },
+        )
+    }
+    if (webDavRestoreDialog) {
+        AlertDialog(
+            onDismissRequest = { webDavRestoreDialog = false },
+            title = { Text("从 WebDAV 恢复？") },
+            text = {
+                Text("将下载远端备份，并按笔记 ID 合并。已有同名笔记会被覆盖。")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        webDavRestoreDialog = false
+                        scope.launch {
+                            runCatching {
+                                val content = WebDavClient(webDavConfig()).download()
+                                repository.restoreBackup(BackupManager.decode(content))
+                            }.onSuccess { snackbar.showSnackbar("WebDAV 备份已恢复") }
+                                .onFailure { snackbar.showSnackbar("恢复失败：${it.message}") }
+                        }
+                    },
+                ) { Text("下载并恢复") }
+            },
+            dismissButton = {
+                TextButton(onClick = { webDavRestoreDialog = false }) { Text("取消") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun WebDavConfigDialog(
+    initialUrl: String,
+    initialUsername: String,
+    passwordConfigured: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String) -> Unit,
+    onClear: () -> Unit,
+) {
+    var url by remember { mutableStateOf(initialUrl) }
+    var username by remember { mutableStateOf(initialUsername) }
+    var password by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("WebDAV 在线备份") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text("备份文件 URL") },
+                    placeholder = {
+                        Text("https://dav.example.com/notes/quyang-backup.json")
+                    },
+                    supportingText = { Text("远端建议使用 HTTPS，并填写完整 JSON 文件地址") },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    label = { Text("用户名") },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = {
+                        Text(if (passwordConfigured) "密码（留空则不修改）" else "密码")
+                    },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = url.isNotBlank(),
+                onClick = { onSave(url.trim(), username.trim(), password) },
+            ) { Text("保存") }
+        },
+        dismissButton = {
+            Row {
+                if (initialUrl.isNotBlank() || initialUsername.isNotBlank()) {
+                    TextButton(onClick = onClear) { Text("清除") }
+                }
+                TextButton(onClick = onDismiss) { Text("取消") }
+            }
+        },
+    )
 }
 
 @Composable

@@ -28,6 +28,10 @@ Result:
 - Cold launch and empty state.
 - Create a note, title/body input, auto-save.
 - Markdown mode and preview.
+- Ruled-paper editor rendering.
+- Direct multi-file Markdown import.
+- WebDAV configuration, connection test, upload, restore, and launch sync.
+- Delete confirmation for notes, folders, and attachments.
 - Force-stop and relaunch: note persisted.
 - Search filters by title/body/tag.
 - Folder creation and folder chip filtering.

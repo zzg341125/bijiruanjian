@@ -69,7 +69,21 @@ object ShareImage {
             .coerceIn(480, 18_000)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        canvas.drawColor(Color.rgb(250, 247, 240))
+        canvas.drawColor(Color.rgb(249, 242, 227))
+        val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(42, 105, 91, 74)
+            strokeWidth = 2f
+        }
+        var lineY = 96f
+        while (lineY < height) {
+            canvas.drawLine(0f, lineY, width.toFloat(), lineY, linePaint)
+            lineY += 82f
+        }
+        val marginPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(72, 171, 104, 54)
+            strokeWidth = 3f
+        }
+        canvas.drawLine(horizontal - 24f, 0f, horizontal - 24f, height.toFloat(), marginPaint)
 
         canvas.save()
         canvas.translate(horizontal.toFloat(), horizontal.toFloat())
@@ -84,7 +98,7 @@ object ShareImage {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         canvas.drawText(
-            "Lattice Notes",
+            "曲阳便签",
             horizontal.toFloat(),
             (height - 44).toFloat(),
             footerPaint,

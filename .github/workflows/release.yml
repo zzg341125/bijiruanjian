@@ -44,7 +44,7 @@ jobs:
         run: |
           mkdir -p dist
           APK_SOURCE="app/build/outputs/apk/release/app-release.apk"
-          APK_NAME="LatticeNotes-${GITHUB_REF_NAME}-release.apk"
+          APK_NAME="QuyangNotes-${GITHUB_REF_NAME}-release.apk"
           cp "$APK_SOURCE" "dist/$APK_NAME"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
           "$APKSIGNER" verify --verbose "dist/$APK_NAME"
@@ -54,8 +54,8 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Lattice Notes ${{ github.ref_name }}
+          name: 曲阳便签 ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            dist/LatticeNotes-${{ github.ref_name }}-release.apk
+            dist/QuyangNotes-${{ github.ref_name }}-release.apk
             dist/SHA256SUMS.txt

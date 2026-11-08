@@ -4,6 +4,7 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import io.github.latticenotes.data.AppDatabase
+import io.github.latticenotes.data.CredentialVault
 import io.github.latticenotes.data.NotesRepository
 import io.github.latticenotes.data.SettingsRepository
 
@@ -11,6 +12,7 @@ class AppContainer(application: Application) {
     private val database = AppDatabase.build(application)
     val notes = NotesRepository(application, database.notesDao())
     val settings = SettingsRepository(application)
+    val credentials = CredentialVault(application)
 }
 
 class LatticeApplication : Application() {
@@ -24,7 +26,7 @@ class LatticeApplication : Application() {
         manager.createNotificationChannel(
             NotificationChannel(
                 "note_reminders",
-                "Note reminders",
+                "便签提醒",
                 NotificationManager.IMPORTANCE_DEFAULT,
             ),
         )

@@ -139,6 +139,37 @@ class NotesRepository(
     suspend fun search(query: String): List<NoteEntity> =
         dao.search(query.trim(), limit = 50)
 
+    suspend fun importMarkdown(uri: Uri): Long? {
+        val resolver = context.contentResolver
+        val displayName = resolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        } ?: "Imported note.md"
+        val content = resolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
+            val buffer = CharArray(8192)
+            val output = StringBuilder()
+            while (output.length < MAX_IMPORT_CHARS) {
+                val count = reader.read(buffer)
+                if (count < 0) break
+                output.append(buffer, 0, count)
+            }
+            output.toString().take(MAX_IMPORT_CHARS)
+        } ?: return null
+        val title = displayName
+            .substringBeforeLast('.', displayName)
+            .ifBlank { "Markdown 导入" }
+        return createNote(
+            title = title,
+            body = content,
+            format = NoteFormat.MARKDOWN,
+        )
+    }
+
     suspend fun getAllForBackup(): BackupPayload = BackupPayload(
         notes = dao.getAllForBackup(),
         folders = dao.getFoldersForBackup(),
@@ -151,10 +182,38 @@ class NotesRepository(
         payload.attachments.forEach { dao.insertAttachment(it.copy(id = 0)) }
     }
 
+    suspend fun mergeBackup(payload: BackupPayload) {
+        val localNotes = dao.getAllForBackup().associateBy { it.id }
+        payload.notes.forEach { remote ->
+            val local = localNotes[remote.id]
+            if (local == null || remote.updatedAt > local.updatedAt) {
+                dao.upsert(remote)
+            }
+        }
+
+        val localFolderIds = dao.getFoldersForBackup().map { it.id }.toSet()
+        payload.folders.filter { it.id !in localFolderIds }.forEach {
+            dao.insertFolder(it)
+        }
+
+        val existingAttachments = dao.getAllAttachmentsForBackup()
+            .map { "${it.noteId}:${it.name}:${it.uri}" }
+            .toSet()
+        val mergedNoteIds = dao.getAllForBackup().map { it.id }.toSet()
+        payload.attachments
+            .filter { it.noteId in mergedNoteIds }
+            .filter { "${it.noteId}:${it.name}:${it.uri}" !in existingAttachments }
+            .forEach { dao.insertAttachment(it.copy(id = 0)) }
+    }
+
     private fun deleteAttachmentFile(uriValue: String) {
         runCatching {
             val uri = Uri.parse(uriValue)
             if (uri.scheme == "file") uri.path?.let { File(it).delete() }
         }
+    }
+
+    companion object {
+        private const val MAX_IMPORT_CHARS = 2_000_000
     }
 }

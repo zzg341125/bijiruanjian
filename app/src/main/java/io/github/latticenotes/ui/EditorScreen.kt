@@ -48,7 +48,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -109,6 +108,7 @@ fun EditorScreen(
     var folderDialog by remember { mutableStateOf(false) }
     var tagDialog by remember { mutableStateOf(false) }
     var deleteConfirm by remember { mutableStateOf(false) }
+    var attachmentToDelete by remember { mutableStateOf<AttachmentEntity?>(null) }
 
     LaunchedEffect(note) {
         val value = note ?: return@LaunchedEffect
@@ -338,17 +338,18 @@ fun EditorScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
                 ),
             )
         },
     ) { padding ->
-        Surface(
+        RuledPaper(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            color = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface,
         ) {
             Column(
                 modifier = Modifier
@@ -467,7 +468,7 @@ fun EditorScreen(
                                 )
                             }
                         },
-                        onDelete = { scope.launch { repository.removeAttachment(it) } },
+                        onDelete = { attachmentToDelete = it },
                     )
                 }
                 Text(
@@ -552,6 +553,24 @@ fun EditorScreen(
             },
             dismissButton = {
                 TextButton(onClick = { deleteConfirm = false }) { Text("取消") }
+            },
+        )
+    }
+    attachmentToDelete?.let { attachment ->
+        AlertDialog(
+            onDismissRequest = { attachmentToDelete = null },
+            title = { Text("删除附件？") },
+            text = { Text("确定删除“${attachment.name}”吗？此操作无法撤销。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch { repository.removeAttachment(attachment) }
+                        attachmentToDelete = null
+                    },
+                ) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { attachmentToDelete = null }) { Text("取消") }
             },
         )
     }

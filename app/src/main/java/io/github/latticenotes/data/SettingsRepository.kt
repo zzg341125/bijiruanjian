@@ -16,12 +16,15 @@ private val Context.settingsDataStore by preferencesDataStore(name = "settings")
 
 data class AppSettings(
     val themeMode: String = "system",
-    val dynamicColor: Boolean = true,
+    val dynamicColor: Boolean = false,
     val fontScale: Float = 1f,
     val appLockEnabled: Boolean = false,
     val pinHash: String = "",
     val pinSalt: String = "",
     val defaultFormat: String = NoteFormat.TEXT.name,
+    val webDavUrl: String = "",
+    val webDavUsername: String = "",
+    val webDavAutoSync: Boolean = true,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -33,6 +36,9 @@ class SettingsRepository(private val context: Context) {
         val pinHash = stringPreferencesKey("pin_hash")
         val pinSalt = stringPreferencesKey("pin_salt")
         val defaultFormat = stringPreferencesKey("default_format")
+        val webDavUrl = stringPreferencesKey("webdav_url")
+        val webDavUsername = stringPreferencesKey("webdav_username")
+        val webDavAutoSync = booleanPreferencesKey("webdav_auto_sync")
     }
 
     val settings: Flow<AppSettings> = context.settingsDataStore.data
@@ -43,12 +49,15 @@ class SettingsRepository(private val context: Context) {
         .map { preferences ->
             AppSettings(
                 themeMode = preferences[Keys.themeMode] ?: "system",
-                dynamicColor = preferences[Keys.dynamicColor] ?: true,
+                dynamicColor = preferences[Keys.dynamicColor] ?: false,
                 fontScale = (preferences[Keys.fontScale] ?: 1f).coerceIn(0.8f, 1.5f),
                 appLockEnabled = preferences[Keys.lockEnabled] ?: false,
                 pinHash = preferences[Keys.pinHash] ?: "",
                 pinSalt = preferences[Keys.pinSalt] ?: "",
                 defaultFormat = preferences[Keys.defaultFormat] ?: NoteFormat.TEXT.name,
+                webDavUrl = preferences[Keys.webDavUrl] ?: "",
+                webDavUsername = preferences[Keys.webDavUsername] ?: "",
+                webDavAutoSync = preferences[Keys.webDavAutoSync] ?: true,
             )
         }
 
@@ -66,6 +75,24 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setDefaultFormat(value: NoteFormat) {
         context.settingsDataStore.edit { it[Keys.defaultFormat] = value.name }
+    }
+
+    suspend fun setWebDav(url: String, username: String) {
+        context.settingsDataStore.edit {
+            it[Keys.webDavUrl] = url.trim()
+            it[Keys.webDavUsername] = username.trim()
+        }
+    }
+
+    suspend fun setWebDavAutoSync(enabled: Boolean) {
+        context.settingsDataStore.edit { it[Keys.webDavAutoSync] = enabled }
+    }
+
+    suspend fun clearWebDav() {
+        context.settingsDataStore.edit {
+            it.remove(Keys.webDavUrl)
+            it.remove(Keys.webDavUsername)
+        }
     }
 
     suspend fun setPin(pin: String) {

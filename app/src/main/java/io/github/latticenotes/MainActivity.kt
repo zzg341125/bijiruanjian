@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
                     AppNav(
                         repository = container.notes,
                         settingsRepository = container.settings,
+                        credentialVault = container.credentials,
                         settings = settings,
                         launchRequest = launchRequest,
                     )

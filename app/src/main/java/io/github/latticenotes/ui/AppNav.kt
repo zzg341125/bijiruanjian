@@ -1,5 +1,6 @@
 package io.github.latticenotes.ui
 
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -12,9 +13,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.compose.ui.platform.LocalContext
 import io.github.latticenotes.data.AppSettings
+import io.github.latticenotes.data.CredentialVault
 import io.github.latticenotes.data.NoteFormat
 import io.github.latticenotes.data.NotesRepository
+import io.github.latticenotes.data.OnlineSyncManager
 import io.github.latticenotes.data.SettingsRepository
 import kotlinx.coroutines.launch
 
@@ -29,12 +33,22 @@ data class LaunchRequest(
 fun AppNav(
     repository: NotesRepository,
     settingsRepository: SettingsRepository,
+    credentialVault: CredentialVault,
     settings: AppSettings,
     launchRequest: LaunchRequest?,
 ) {
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var startSearch by remember { mutableStateOf(launchRequest?.destination == "search") }
+
+    LaunchedEffect(settings.webDavUrl, settings.webDavAutoSync) {
+        OnlineSyncManager.syncOnLaunch(
+            repository = repository,
+            settings = settings,
+            credentials = credentialVault,
+        )?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+    }
 
     LaunchedEffect(launchRequest?.id) {
         val request = launchRequest ?: return@LaunchedEffect
@@ -92,6 +106,7 @@ fun AppNav(
             SettingsScreen(
                 repository = repository,
                 settingsRepository = settingsRepository,
+                credentialVault = credentialVault,
                 settings = settings,
                 onBack = { navController.popBackStack() },
             )

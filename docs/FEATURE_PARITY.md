@@ -6,7 +6,7 @@ account services, or paid backend behavior.
 
 ## Implemented in v0.1
 
-| Capability | Lattice Notes |
+| Capability | 曲阳便签 |
 | --- | --- |
 | Text notes | Yes |
 | Markdown mode and preview | Yes |
@@ -25,6 +25,9 @@ account services, or paid backend behavior.
 | Application PIN lock | Yes |
 | Theme, dynamic color, font scale | Yes |
 | JSON backup and restore | Yes |
+| WebDAV online backup and restore | Yes |
+| Direct Markdown import | Yes |
+| Ruled paper editor | Yes |
 | Incoming text share | Yes |
 | App shortcuts | Yes |
 
@@ -38,7 +41,6 @@ account services, or paid backend behavior.
 
 ## Next stages
 
-- WebDAV sync adapter with conflict handling.
 - Encrypted attachment bundle backup.
 - Optional user-configured AI provider.
 - Home-screen widget.

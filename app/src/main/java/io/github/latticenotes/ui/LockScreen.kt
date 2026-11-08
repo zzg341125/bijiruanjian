@@ -50,7 +50,7 @@ fun LockScreen(
                     tint = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    text = "格栅笔记已锁定",
+                    text = "曲阳便签已锁定",
                     style = MaterialTheme.typography.headlineSmall,
                 )
                 Text(

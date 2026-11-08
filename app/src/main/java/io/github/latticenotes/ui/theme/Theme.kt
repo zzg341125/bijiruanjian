@@ -1,53 +1,51 @@
 package io.github.latticenotes.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import io.github.latticenotes.data.AppSettings
 
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF305C4A),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFB8E4CC),
-    onPrimaryContainer = Color(0xFF082018),
-    secondary = Color(0xFF546A5E),
-    secondaryContainer = Color(0xFFD7E8DE),
-    tertiary = Color(0xFF9A5B32),
-    background = Color(0xFFF8F4EA),
-    onBackground = Color(0xFF20231F),
-    surface = Color(0xFFFFFBF3),
-    onSurface = Color(0xFF20231F),
-    surfaceVariant = Color(0xFFE8E1D4),
-    outline = Color(0xFF7A776E),
+    primary = Color(0xFF5C5142),
+    onPrimary = Color(0xFFFFF7E8),
+    primaryContainer = Color(0xFFD8CBB6),
+    onPrimaryContainer = Color(0xFF302821),
+    secondary = Color(0xFF746554),
+    secondaryContainer = Color(0xFFE9DFCD),
+    tertiary = Color(0xFFB36F35),
+    background = Color(0xFFE9E1D2),
+    onBackground = Color(0xFF302821),
+    surface = Color(0xFFFBF6E9),
+    onSurface = Color(0xFF302821),
+    surfaceVariant = Color(0xFFE4DAC7),
+    outline = Color(0xFF837767),
+    outlineVariant = Color(0xFFC8BCA8),
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF9CCFB1),
-    onPrimary = Color(0xFF00382A),
-    primaryContainer = Color(0xFF174D3B),
-    onPrimaryContainer = Color(0xFFB8E4CC),
-    secondary = Color(0xFFBBCBBF),
-    secondaryContainer = Color(0xFF3C4B42),
-    tertiary = Color(0xFFF0B58A),
-    background = Color(0xFF121613),
-    onBackground = Color(0xFFE2E3DC),
-    surface = Color(0xFF181D19),
-    onSurface = Color(0xFFE2E3DC),
-    surfaceVariant = Color(0xFF3E463F),
-    outline = Color(0xFF8C948C),
+    primary = Color(0xFFD6C4A6),
+    onPrimary = Color(0xFF352D24),
+    primaryContainer = Color(0xFF514438),
+    onPrimaryContainer = Color(0xFFF1E5D2),
+    secondary = Color(0xFFD0C0AA),
+    secondaryContainer = Color(0xFF4A4035),
+    tertiary = Color(0xFFE9A76E),
+    background = Color(0xFF211C17),
+    onBackground = Color(0xFFEDE3D2),
+    surface = Color(0xFF2B251F),
+    onSurface = Color(0xFFEDE3D2),
+    surfaceVariant = Color(0xFF4A4036),
+    outline = Color(0xFFA99A86),
+    outlineVariant = Color(0xFF574B3F),
 )
 
 @Composable
@@ -61,15 +59,7 @@ fun LatticeTheme(
         "dark" -> true
         else -> systemDark
     }
-    val context = LocalContext.current
-    val colors = when {
-        settings.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dark ->
-            dynamicDarkColorScheme(context)
-        settings.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-            dynamicLightColorScheme(context)
-        dark -> DarkColors
-        else -> LightColors
-    }
+    val colors = if (dark) DarkColors else LightColors
     val currentDensity = LocalDensity.current
     CompositionLocalProvider(
         LocalDensity provides Density(

@@ -1,6 +1,9 @@
 package io.github.latticenotes.ui
 
 import android.content.Intent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -62,6 +65,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -105,6 +109,14 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     val notes by repository.observeNotes().collectAsStateWithLifecycle(emptyList())
     val folders by repository.observeFolders().collectAsStateWithLifecycle(emptyList())
+    val markdownPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        scope.launch {
+            val count = uris.mapNotNull { repository.importMarkdown(it) }.size
+            Toast.makeText(context, "已导入 $count 个 Markdown 文件", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     var view by remember { mutableStateOf(NoteView.ALL) }
     var selectedFolder by remember { mutableStateOf<FolderEntity?>(null) }
@@ -170,7 +182,7 @@ fun HomeScreen(
                 title = {
                     Text(
                         text = when (view) {
-                            NoteView.ALL -> "格栅笔记"
+                            NoteView.ALL -> "曲阳便签"
                             NoteView.STARRED -> "加星笔记"
                             NoteView.TRASH -> "回收站"
                             NoteView.FOLDER -> selectedFolder?.name ?: "文件夹"
@@ -206,6 +218,21 @@ fun HomeScreen(
                                 },
                             )
                             DropdownMenuItem(
+                                text = { Text("导入 Markdown") },
+                                leadingIcon = { Icon(Icons.Outlined.Add, null) },
+                                onClick = {
+                                    appMenuOpen = false
+                                    markdownPicker.launch(
+                                        arrayOf(
+                                            "text/markdown",
+                                            "text/x-markdown",
+                                            "text/plain",
+                                            "application/octet-stream",
+                                        ),
+                                    )
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("管理文件夹") },
                                 leadingIcon = { Icon(Icons.Outlined.List, null) },
                                 onClick = {
@@ -227,7 +254,10 @@ fun HomeScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
                 ),
             )
         },
@@ -355,8 +385,7 @@ fun HomeScreen(
                                     scope.launch { repository.setStarred(note.id, !note.starred) }
                                 },
                                 onDelete = {
-                                    if (view == NoteView.TRASH) deleteNote = note
-                                    else scope.launch { repository.moveToTrash(note.id) }
+                                    deleteNote = note
                                 },
                                 onRestore = { scope.launch { repository.restore(note.id) } },
                                 onFolder = { moveNote = note },
@@ -463,15 +492,29 @@ fun HomeScreen(
     deleteNote?.let { note ->
         AlertDialog(
             onDismissRequest = { deleteNote = null },
-            title = { Text("永久删除？") },
-            text = { Text("此操作无法撤销。") },
+            title = { Text(if (note.trashed) "永久删除？" else "移到回收站？") },
+            text = {
+                Text(
+                    if (note.trashed) {
+                        "此操作会永久删除笔记及其附件索引，无法撤销。"
+                    } else {
+                        "笔记会移到回收站，你仍可以恢复。"
+                    },
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        scope.launch { repository.permanentlyDelete(note.id) }
+                        scope.launch {
+                            if (note.trashed) {
+                                repository.permanentlyDelete(note.id)
+                            } else {
+                                repository.moveToTrash(note.id)
+                            }
+                        }
                         deleteNote = null
                     },
-                ) { Text("永久删除") }
+                ) { Text(if (note.trashed) "永久删除" else "移到回收站") }
             },
             dismissButton = {
                 TextButton(onClick = { deleteNote = null }) { Text("取消") }
@@ -526,12 +569,28 @@ private fun NoteCard(
                 onLongClick = { menuOpen = true },
             ),
         colors = CardDefaults.cardColors(
-            containerColor = Color(note.color),
+            containerColor = Color(0xFFF3E8D3),
             contentColor = Color(0xFF20231F),
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column(
+            Modifier
+                .padding(16.dp)
+                .drawBehind {
+                    val step = 32.dp.toPx()
+                    var y = step
+                    while (y < size.height) {
+                        drawLine(
+                            color = Color(0xFF8D806E).copy(alpha = 0.12f),
+                            start = androidx.compose.ui.geometry.Offset(0f, y),
+                            end = androidx.compose.ui.geometry.Offset(size.width, y),
+                            strokeWidth = 1f,
+                        )
+                        y += step
+                    }
+                },
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = note.title.ifBlank { "无标题" },
