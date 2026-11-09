@@ -1,13 +1,30 @@
 package io.github.latticenotes.backup
 
+import android.content.Context
+import android.graphics.Bitmap
+import androidx.core.graphics.drawable.toBitmap
+import io.github.latticenotes.R
 import io.github.latticenotes.data.AttachmentEntity
+import java.io.ByteArrayOutputStream
 import java.util.Base64
 
 object SingleFileExporter {
+    fun appIconDataUri(context: Context): String? = runCatching {
+        val bitmap = context.getDrawable(R.drawable.ic_launcher_foreground)
+            ?.toBitmap(width = 256, height = 256)
+            ?: return null
+        val output = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+        bitmap.recycle()
+        "data:image/png;base64," +
+            Base64.getEncoder().encodeToString(output.toByteArray())
+    }.getOrNull()
+
     fun toHtml(
         title: String,
         body: String,
         attachments: List<AttachmentEntity>,
+        iconDataUri: String? = null,
     ): String {
         val safeTitle = escape(title.ifBlank { "无标题" })
         val sections = attachments.joinToString("\n") { attachment ->
@@ -53,7 +70,12 @@ object SingleFileExporter {
                   box-shadow: 0 0 24px rgba(65,48,30,.2);
                 }
                 .brand { display:flex; align-items:center; gap:14px; color:#625545; margin-bottom:32px; }
-                .brand svg { width:52px; height:52px; flex:none; }
+                .brand-icon {
+                  width: 52px;
+                  height: 52px;
+                  flex: none;
+                  object-fit: contain;
+                }
                 h1 { font-size: 34px; line-height: 1.35; margin: 0 0 30px; }
                 .body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 19px; line-height: 32px; }
                 figure { margin: 32px 0; }
@@ -70,13 +92,9 @@ object SingleFileExporter {
             <body>
               <main>
                 <div class="brand">
-                  <svg viewBox="0 0 64 64" aria-label="曲阳便签">
-                    <rect x="3" y="3" width="58" height="58" rx="14" fill="#1879a9"/>
-                    <rect x="14" y="9" width="37" height="44" rx="5" fill="#f6e7c9" stroke="#b9945b" stroke-width="2"/>
-                    <path d="M32 12l17 17-5 5-17-17z" fill="#d92626"/>
-                    <path d="M26 34l3 8 8-3z" fill="#dfbd82"/>
-                    <path d="M20 22h20M20 28h16M20 34h11" stroke="#8b8175" stroke-width="2" stroke-linecap="round"/>
-                  </svg>
+                  ${if (iconDataUri != null) {
+                      "<img class=\"brand-icon\" src=\"$iconDataUri\" alt=\"曲阳便签\">"
+                  } else ""}
                   <strong>曲阳便签 · 单文件</strong>
                 </div>
                 <h1>$safeTitle</h1>

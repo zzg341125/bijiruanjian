@@ -191,7 +191,12 @@ fun EditorScreen(
             scope.launch {
                 runCatching {
                     val exportedAttachments = repository.getAttachmentsForExport(noteId)
-                    val html = SingleFileExporter.toHtml(title, body, exportedAttachments)
+                    val html = SingleFileExporter.toHtml(
+                        title = title,
+                        body = body,
+                        attachments = exportedAttachments,
+                        iconDataUri = SingleFileExporter.appIconDataUri(context),
+                    )
                     context.contentResolver.openOutputStream(uri)
                         ?.bufferedWriter()
                         ?.use { it.write(html) }
