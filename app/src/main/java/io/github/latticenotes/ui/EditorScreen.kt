@@ -24,6 +24,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -207,13 +208,15 @@ fun EditorScreen(
 
     fun setTitleWithHistory(value: String) {
         if (value == title) return
-        history.record(EditorTextSnapshot(title, body))
+        val mergeKey = if (value.length < title.length) "title-delete" else "title-insert"
+        history.record(EditorTextSnapshot(title, body), mergeKey)
         title = value
     }
 
     fun setBodyWithHistory(value: String) {
         if (value == body) return
-        history.record(EditorTextSnapshot(title, body))
+        val mergeKey = if (value.length < body.length) "body-delete" else "body-insert"
+        history.record(EditorTextSnapshot(title, body), mergeKey)
         body = value
     }
 
@@ -298,14 +301,19 @@ fun EditorScreen(
                             Icon(Icons.Outlined.ArrowBack, contentDescription = "返回")
                         }
                         Spacer(Modifier.weight(1f))
-                        IconButton(
+                        TextButton(
                             onClick = ::undo,
                             enabled = history.canUndo,
-                            modifier = Modifier.size(40.dp),
+                            modifier = Modifier
+                                .width(58.dp)
+                                .height(40.dp),
+                            contentPadding = PaddingValues(horizontal = 4.dp),
                         ) {
                             Text(
-                                text = "↶",
-                                style = MaterialTheme.typography.headlineSmall,
+                                text = "撤销",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
                                 color = if (history.canUndo) {
                                     Color(0xFFFFF8EA)
                                 } else {

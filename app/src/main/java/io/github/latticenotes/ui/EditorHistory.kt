@@ -7,9 +7,11 @@ data class EditorTextSnapshot(
     val body: String,
 )
 
-class EditorHistory(private val maximumEntries: Int = 100) {
+class EditorHistory(private val maximumEntries: Int = 20) {
     private val undoStack = mutableStateListOf<EditorTextSnapshot>()
     private val redoStack = mutableStateListOf<EditorTextSnapshot>()
+    private var lastMergeKey: String? = null
+    private var lastRecordedAt: Long = Long.MIN_VALUE
 
     val canUndo: Boolean
         get() = undoStack.isNotEmpty()
@@ -17,10 +19,21 @@ class EditorHistory(private val maximumEntries: Int = 100) {
     val canRedo: Boolean
         get() = redoStack.isNotEmpty()
 
-    fun record(current: EditorTextSnapshot) {
+    fun record(
+        current: EditorTextSnapshot,
+        mergeKey: String? = null,
+        timeMillis: Long = System.currentTimeMillis(),
+    ) {
         if (undoStack.lastOrNull() == current) return
-        undoStack.add(current)
-        if (undoStack.size > maximumEntries) undoStack.removeAt(0)
+        val canMerge = mergeKey != null &&
+            mergeKey == lastMergeKey &&
+            timeMillis - lastRecordedAt <= 2_500
+        if (!canMerge) {
+            undoStack.add(current)
+            if (undoStack.size > maximumEntries) undoStack.removeAt(0)
+        }
+        lastMergeKey = mergeKey
+        lastRecordedAt = timeMillis
         redoStack.clear()
     }
 
@@ -28,6 +41,7 @@ class EditorHistory(private val maximumEntries: Int = 100) {
         if (undoStack.isEmpty()) return null
         val previous = undoStack.removeAt(undoStack.lastIndex)
         redoStack.add(current)
+        clearMerge()
         return previous
     }
 
@@ -35,6 +49,12 @@ class EditorHistory(private val maximumEntries: Int = 100) {
         if (redoStack.isEmpty()) return null
         val next = redoStack.removeAt(redoStack.lastIndex)
         undoStack.add(current)
+        clearMerge()
         return next
+    }
+
+    private fun clearMerge() {
+        lastMergeKey = null
+        lastRecordedAt = Long.MIN_VALUE
     }
 }
