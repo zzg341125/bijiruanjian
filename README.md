@@ -6,7 +6,7 @@
 
 ## 截图
 
-| 笔记列表 | Markdown 编辑器 |
+| 分类菜单 | 信纸编辑器 |
 | --- | --- |
 | ![笔记列表](docs/screenshot-quyang-home.png) | ![信纸编辑器](docs/screenshot-quyang-editor.png) |
 
@@ -16,7 +16,7 @@
 - 标题、正文、标签、文件夹和自动保存
 - 主页固定搜索框
 - 编辑器撤销/重做历史
-- 全部、加星、文件夹、回收站视图
+- 顶部分类菜单：全部、加星、文件夹、回收站及实时数量
 - 置顶、加星、软删除、恢复和永久删除
 - 标题与正文搜索，本地知识检索
 - 图片及任意文档附件
@@ -25,7 +25,7 @@
 - 直接批量导入 `.md` 文件
 - WebDAV 在线备份、恢复与启动自动同步
 - 笔记提醒与系统通知
-- 文本分享和长图分享
+- 飞机按钮操作面板：复制文字、文字分享、图片分享、发送邮件
 - PIN 应用锁
 - 浅色/深色/跟随系统主题
 - 暖棕/米黄主题、字号缩放
@@ -80,8 +80,8 @@ app/build/outputs/apk/debug/app-debug.apk
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.2.3
-git push origin v0.2.3
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。

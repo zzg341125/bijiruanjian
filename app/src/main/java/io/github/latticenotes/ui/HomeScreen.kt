@@ -5,6 +5,8 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,10 +19,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -41,14 +44,16 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -56,6 +61,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -82,6 +88,9 @@ import io.github.latticenotes.data.NotesRepository
 import io.github.latticenotes.util.formatTimestamp
 import io.github.latticenotes.util.notePreview
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private enum class NoteView {
     ALL,
@@ -95,6 +104,8 @@ private enum class NoteSort {
     CREATED,
     TITLE,
 }
+
+private val categoryTimeFormatter = DateTimeFormatter.ofPattern("MM/dd HH:mm")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -125,6 +136,7 @@ fun HomeScreen(
     var sort by remember { mutableStateOf(NoteSort.UPDATED) }
     var query by remember { mutableStateOf("") }
     val searchFocus = remember { FocusRequester() }
+    var categoryMenuOpen by remember { mutableStateOf(false) }
     var appMenuOpen by remember { mutableStateOf(false) }
     var sortMenuOpen by remember { mutableStateOf(false) }
     var folderDialogOpen by remember { mutableStateOf(false) }
@@ -172,25 +184,132 @@ fun HomeScreen(
             }
             .toList()
     }
+    val allCount = remember(notes) { notes.count { !it.trashed } }
+    val starredCount = remember(notes) { notes.count { !it.trashed && it.starred } }
+    val trashCount = remember(notes) { notes.count { it.trashed } }
+    val latestUpdate = remember(notes) { notes.maxOfOrNull { it.updatedAt } }
+    val categoryTitle = when (view) {
+        NoteView.ALL -> "全部便签"
+        NoteView.STARRED -> "加星便签"
+        NoteView.TRASH -> "回收站"
+        NoteView.FOLDER -> selectedFolder?.name ?: "文件夹"
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Outlined.Settings, contentDescription = "设置")
                     }
                 },
                 title = {
-                    Text(
-                        text = when (view) {
-                            NoteView.ALL -> "曲阳便签"
-                            NoteView.STARRED -> "加星笔记"
-                            NoteView.TRASH -> "回收站"
-                            NoteView.FOLDER -> selectedFolder?.name ?: "文件夹"
-                        },
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    Box {
+                        Row(
+                            modifier = Modifier
+                                .clickable { categoryMenuOpen = true }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = categoryTitle,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = if (categoryMenuOpen) "▴" else "▾",
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = categoryMenuOpen,
+                            onDismissRequest = { categoryMenuOpen = false },
+                            modifier = Modifier.widthIn(min = 300.dp, max = 360.dp),
+                            containerColor = Color(0xFFFFFBF5),
+                        ) {
+                            CompositionLocalProvider(
+                                LocalContentColor provides Color(0xFF2F2822),
+                            ) {
+                                CategoryMenuRow(
+                                label = "全部便签",
+                                count = allCount,
+                                selected = view == NoteView.ALL,
+                                icon = { Icon(Icons.Outlined.List, null) },
+                                onClick = {
+                                    view = NoteView.ALL
+                                    selectedFolder = null
+                                    categoryMenuOpen = false
+                                },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                            CategoryMenuRow(
+                                label = "加星便签",
+                                count = starredCount,
+                                selected = view == NoteView.STARRED,
+                                icon = { Icon(Icons.Outlined.Star, null) },
+                                onClick = {
+                                    view = NoteView.STARRED
+                                    selectedFolder = null
+                                    categoryMenuOpen = false
+                                },
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                            CategoryMenuRow(
+                                label = "回收站",
+                                count = trashCount,
+                                selected = view == NoteView.TRASH,
+                                icon = { Icon(Icons.Outlined.Delete, null) },
+                                onClick = {
+                                    view = NoteView.TRASH
+                                    selectedFolder = null
+                                    categoryMenuOpen = false
+                                },
+                            )
+                            folders.forEach { folder ->
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                                )
+                                CategoryMenuRow(
+                                    label = folder.name,
+                                    count = notes.count { !it.trashed && it.folderId == folder.id },
+                                    selected = view == NoteView.FOLDER && selectedFolder?.id == folder.id,
+                                    icon = {
+                                        Icon(
+                                            Icons.Outlined.List,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    },
+                                    onClick = {
+                                        selectedFolder = folder
+                                        view = NoteView.FOLDER
+                                        categoryMenuOpen = false
+                                    },
+                                )
+                            }
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                            )
+                                CategoryMenuFooter(
+                                    lastUpdated = latestUpdate,
+                                    onManageFolders = {
+                                        categoryMenuOpen = false
+                                        editFolder = null
+                                        folderDialogOpen = true
+                                    },
+                                    onSort = {
+                                        categoryMenuOpen = false
+                                        sortMenuOpen = true
+                                    },
+                                    onAddFolder = {
+                                        categoryMenuOpen = false
+                                        editFolder = null
+                                        folderDialogOpen = true
+                                    },
+                                )
+                            }
+                        }
+                    }
                 },
                 actions = {
                     IconButton(onClick = onOpenKnowledge) {
@@ -293,53 +412,6 @@ fun HomeScreen(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             )
-
-            LazyRow(
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                item {
-                    FilterChip(
-                        selected = view == NoteView.ALL,
-                        onClick = { view = NoteView.ALL },
-                        label = { Text("全部") },
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = view == NoteView.STARRED,
-                        onClick = { view = NoteView.STARRED },
-                        label = { Text("加星") },
-                        leadingIcon = { Icon(Icons.Outlined.Star, null, Modifier.size(18.dp)) },
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = view == NoteView.TRASH,
-                        onClick = { view = NoteView.TRASH },
-                        label = { Text("回收站") },
-                        leadingIcon = { Icon(Icons.Outlined.Delete, null, Modifier.size(18.dp)) },
-                    )
-                }
-                items(folders, key = { it.id }) { folder ->
-                    FilterChip(
-                        selected = view == NoteView.FOLDER && selectedFolder?.id == folder.id,
-                        onClick = {
-                            selectedFolder = folder
-                            view = NoteView.FOLDER
-                        },
-                        label = { Text(folder.name) },
-                        leadingIcon = {
-                            Box(
-                                Modifier
-                                    .size(10.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(folder.color)),
-                            )
-                        },
-                    )
-                }
-            }
 
             Box(
                 modifier = Modifier
@@ -515,28 +587,155 @@ fun HomeScreen(
             },
         )
     }
-    DropdownMenu(
-        expanded = sortMenuOpen,
-        onDismissRequest = { sortMenuOpen = false },
-    ) {
-        listOf(
-            NoteSort.UPDATED to "最近修改",
-            NoteSort.CREATED to "最近创建",
-            NoteSort.TITLE to "标题",
-        ).forEach { (value, label) ->
-            DropdownMenuItem(
-                text = { Text(label) },
-                leadingIcon = {
-                    if (sort == value) Icon(Icons.Outlined.Check, null) else Spacer(Modifier.width(24.dp))
-                },
-                onClick = {
-                    sort = value
-                    sortMenuOpen = false
+    if (sortMenuOpen) {
+        AlertDialog(
+            onDismissRequest = { sortMenuOpen = false },
+            containerColor = Color(0xFFFFFBF5),
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
+            title = { Text("排序方式") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf(
+                        NoteSort.UPDATED to "最近修改",
+                        NoteSort.CREATED to "最近创建",
+                        NoteSort.TITLE to "标题",
+                    ).forEach { (value, label) ->
+                        TextButton(
+                            onClick = {
+                                sort = value
+                                sortMenuOpen = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            if (sort == value) {
+                                Icon(Icons.Outlined.Check, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text(label, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { sortMenuOpen = false }) { Text("取消") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun CategoryMenuRow(
+    label: String,
+    count: Int,
+    selected: Boolean,
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(58.dp)
+            .background(
+                if (selected) {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f)
+                } else {
+                    Color.Transparent
                 },
             )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.size(30.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            icon()
+        }
+        Spacer(Modifier.width(14.dp))
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun CategoryMenuFooter(
+    lastUpdated: Long?,
+    onManageFolders: () -> Unit,
+    onSort: () -> Unit,
+    onAddFolder: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(72.dp)
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CategoryFooterButton(onClick = onManageFolders) {
+            Icon(Icons.Outlined.List, contentDescription = "管理文件夹")
+        }
+        Text(
+            text = if (lastUpdated == null) {
+                "暂无更新"
+            } else {
+                "上次更新：${categoryTimestamp(lastUpdated)}"
+            },
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        CategoryFooterButton(onClick = onSort) {
+            Text("A↕", style = MaterialTheme.typography.titleSmall)
+        }
+        Spacer(Modifier.width(8.dp))
+        CategoryFooterButton(onClick = onAddFolder) {
+            Icon(Icons.Outlined.Add, contentDescription = "新建文件夹")
         }
     }
 }
+
+@Composable
+private fun CategoryFooterButton(
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+                shape = RoundedCornerShape(9.dp),
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
+    }
+}
+
+private fun categoryTimestamp(value: Long): String =
+    Instant.ofEpochMilli(value)
+        .atZone(ZoneId.systemDefault())
+        .format(categoryTimeFormatter)
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable

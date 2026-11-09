@@ -1,8 +1,13 @@
 package io.github.latticenotes.ui
 
+import android.Manifest
+import android.app.Activity
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
-import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -11,7 +16,10 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,11 +29,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -43,19 +55,18 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,12 +75,24 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -80,13 +103,25 @@ import io.github.latticenotes.data.NoteFormat
 import io.github.latticenotes.data.NotesRepository
 import io.github.latticenotes.reminder.ReminderScheduler
 import io.github.latticenotes.share.ShareImage
-import io.github.latticenotes.util.formatTimestamp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Calendar
+
+private val EditorToolbar = Color(0xFF58483C)
+private val EditorPaper = Color(0xFFFDF8EC)
+private val EditorInk = Color(0xFF563C30)
+private val EditorMutedInk = Color(0xFF87796B)
+private val EditorRule = Color(0xFFD8C9B1)
+private val EditorFormatBar = Color(0xFFFFF1D3)
+private val EditorAccent = Color(0xFFC47B28)
+private val EditorShareSheet = Color(0xFFF4F2EF)
+private val editorClockFormatter = DateTimeFormatter.ofPattern("HH:mm")
+private val editorDateFormatter = DateTimeFormatter.ofPattern("M月d日")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,6 +131,7 @@ fun EditorScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
     val note by repository.observeNote(noteId).collectAsStateWithLifecycle(null)
     val attachments by repository.observeAttachments(noteId).collectAsStateWithLifecycle(emptyList())
@@ -106,12 +142,37 @@ fun EditorScreen(
     var body by remember(noteId) { mutableStateOf("") }
     var format by remember(noteId) { mutableStateOf(NoteFormat.TEXT) }
     var preview by remember { mutableStateOf(false) }
+    var shareSheetOpen by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
+    var formatMenuOpen by remember { mutableStateOf(false) }
     var folderDialog by remember { mutableStateOf(false) }
     var tagDialog by remember { mutableStateOf(false) }
     var deleteConfirm by remember { mutableStateOf(false) }
     var attachmentToDelete by remember { mutableStateOf<AttachmentEntity?>(null) }
     val history = remember(noteId) { EditorHistory() }
+
+    val activity = context.findActivity()
+    DisposableEffect(activity) {
+        val controller = activity?.let {
+            WindowCompat.getInsetsController(it.window, it.window.decorView)
+        }
+        val lightStatusBars = controller?.isAppearanceLightStatusBars
+        val lightNavigationBars = controller?.isAppearanceLightNavigationBars
+        controller?.isAppearanceLightStatusBars = false
+        controller?.isAppearanceLightNavigationBars = false
+        onDispose {
+            controller?.isAppearanceLightStatusBars = lightStatusBars ?: true
+            controller?.isAppearanceLightNavigationBars = lightNavigationBars ?: true
+        }
+    }
+    LaunchedEffect(shareSheetOpen, activity) {
+        if (shareSheetOpen) {
+            activity?.let {
+                WindowCompat.getInsetsController(it.window, it.window.decorView)
+                    .isAppearanceLightStatusBars = false
+            }
+        }
+    }
 
     LaunchedEffect(note) {
         val value = note ?: return@LaunchedEffect
@@ -212,214 +273,291 @@ fun EditorScreen(
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) {}
+    val currentFolder = folders.firstOrNull { it.id == currentNote?.folderId }
+    val characterCount = body.count { !it.isWhitespace() }
 
     Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding(),
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = ::goBack) {
-                        Icon(Icons.Outlined.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                title = {
-                    Text(
-                        text = formatTimestamp(currentNote?.updatedAt ?: System.currentTimeMillis()),
-                        style = MaterialTheme.typography.labelMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                actions = {
-                    TextButton(onClick = ::undo, enabled = history.canUndo) {
-                        Text("↶", style = MaterialTheme.typography.titleLarge)
-                    }
-                    TextButton(onClick = ::redo, enabled = history.canRedo) {
-                        Text("↷", style = MaterialTheme.typography.titleLarge)
-                    }
-                    TextButton(onClick = { preview = !preview }) {
-                        Text(if (preview) "编辑" else "预览")
-                    }
-                    IconButton(onClick = { attachmentPicker.launch(arrayOf("*/*")) }) {
-                        Icon(Icons.Outlined.Add, contentDescription = "添加附件")
-                    }
-                    Box {
-                        IconButton(onClick = { menuOpen = true }) {
-                            Icon(Icons.Outlined.MoreVert, contentDescription = "更多")
+            Surface(
+                color = EditorToolbar,
+                contentColor = Color(0xFFFFF8EA),
+                shadowElevation = 4.dp,
+            ) {
+                Column(Modifier.statusBarsPadding()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = ::goBack) {
+                            Icon(Icons.Outlined.ArrowBack, contentDescription = "返回")
                         }
-                        DropdownMenu(
-                            expanded = menuOpen,
-                            onDismissRequest = { menuOpen = false },
+                        Spacer(Modifier.weight(1f))
+                        IconButton(
+                            onClick = ::undo,
+                            enabled = history.canUndo,
+                            modifier = Modifier.size(40.dp),
                         ) {
-                            DropdownMenuItem(
-                                text = { Text(if (currentNote?.pinned == true) "取消置顶" else "置顶") },
-                                leadingIcon = { Icon(Icons.Outlined.Star, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    currentNote?.let {
-                                        scope.launch { repository.setPinned(it.id, !it.pinned) }
-                                    }
+                            Text(
+                                text = "↶",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = if (history.canUndo) {
+                                    Color(0xFFFFF8EA)
+                                } else {
+                                    Color(0x66FFF8EA)
                                 },
                             )
-                            DropdownMenuItem(
-                                text = { Text(if (currentNote?.starred == true) "取消加星" else "加星") },
-                                leadingIcon = {
-                                    Icon(
-                                        if (currentNote?.starred == true) {
-                                            Icons.Outlined.Star
-                                        } else {
-                                            Icons.Outlined.Star
-                                        },
-                                        null,
-                                    )
-                                },
-                                onClick = {
-                                    menuOpen = false
-                                    currentNote?.let {
-                                        scope.launch { repository.setStarred(it.id, !it.starred) }
-                                    }
+                        }
+                        IconButton(
+                            onClick = ::redo,
+                            enabled = history.canRedo,
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Text(
+                                text = "↷",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = if (history.canRedo) {
+                                    Color(0xFFFFF8EA)
+                                } else {
+                                    Color(0x66FFF8EA)
                                 },
                             )
-                            DropdownMenuItem(
-                                text = { Text("文件夹") },
-                                leadingIcon = { Icon(Icons.Outlined.List, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    folderDialog = true
-                                },
+                        }
+                        IconButton(
+                            onClick = { attachmentPicker.launch(arrayOf("*/*")) },
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Icon(Icons.Outlined.Add, contentDescription = "添加图片或附件")
+                        }
+                        IconButton(
+                            onClick = ::goBack,
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Text(
+                                text = "✓",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Medium,
                             )
-                            DropdownMenuItem(
-                                text = { Text("标签") },
-                                leadingIcon = { Icon(Icons.Outlined.Edit, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    tagDialog = true
-                                },
+                        }
+                        IconButton(
+                            onClick = {
+                                keyboardController?.hide()
+                                shareSheetOpen = true
+                            },
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            SendPlaneGlyph(
+                                modifier = Modifier
+                                    .size(23.dp)
+                                    .semantics { contentDescription = "分享" },
                             )
-                            DropdownMenuItem(
-                                text = { Text(if (currentNote?.reminderAt != null) "修改提醒" else "设置提醒") },
-                                leadingIcon = { Icon(Icons.Outlined.DateRange, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    if (
-                                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                        ContextCompat.checkSelfPermission(
-                                            context,
-                                            Manifest.permission.POST_NOTIFICATIONS,
-                                        ) != PackageManager.PERMISSION_GRANTED
-                                    ) {
-                                        notificationPermission.launch(
-                                            Manifest.permission.POST_NOTIFICATIONS,
-                                        )
-                                    }
-                                    val base = currentNote?.reminderAt ?: (System.currentTimeMillis() + 3_600_000)
-                                    val calendar = Calendar.getInstance().apply { timeInMillis = base }
-                                    DatePickerDialog(
-                                        context,
-                                        { _, year, month, day ->
-                                            val date = Calendar.getInstance().apply {
-                                                set(year, month, day, 9, 0, 0)
-                                            }
-                                            TimePickerDialog(
-                                                context,
-                                                { _, hour, minute ->
-                                                    date.set(Calendar.HOUR_OF_DAY, hour)
-                                                    date.set(Calendar.MINUTE, minute)
-                                                    val at = date.timeInMillis
-                                                    currentNote?.let { note ->
-                                                        scope.launch {
-                                                            repository.setReminder(note.id, at)
-                                                            ReminderScheduler.schedule(
-                                                                context,
-                                                                note.id,
-                                                                title,
-                                                                at,
-                                                            )
-                                                        }
-                                                    }
-                                                },
-                                                calendar.get(Calendar.HOUR_OF_DAY),
-                                                calendar.get(Calendar.MINUTE),
-                                                true,
-                                            ).show()
-                                        },
-                                        calendar.get(Calendar.YEAR),
-                                        calendar.get(Calendar.MONTH),
-                                        calendar.get(Calendar.DAY_OF_MONTH),
-                                    ).show()
-                                },
-                            )
-                            if (currentNote?.reminderAt != null) {
+                        }
+                        Box {
+                            IconButton(
+                                onClick = { menuOpen = true },
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(Icons.Outlined.MoreVert, contentDescription = "更多")
+                            }
+                            DropdownMenu(
+                                expanded = menuOpen,
+                                onDismissRequest = { menuOpen = false },
+                            ) {
                                 DropdownMenuItem(
-                                    text = { Text("清除提醒") },
-                                    leadingIcon = { Icon(Icons.Outlined.Close, null) },
+                                    text = { Text(if (preview) "返回编辑" else "预览便签") },
+                                    leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        preview = !preview
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (currentNote?.pinned == true) "取消置顶" else "置顶") },
+                                    leadingIcon = { Icon(Icons.Outlined.Star, null) },
                                     onClick = {
                                         menuOpen = false
                                         currentNote?.let {
-                                            scope.launch { repository.setReminder(it.id, null) }
-                                            ReminderScheduler.cancel(context, it.id)
+                                            scope.launch { repository.setPinned(it.id, !it.pinned) }
                                         }
                                     },
                                 )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("分享文本") },
-                                leadingIcon = { Icon(Icons.Outlined.Share, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    val text = title.ifBlank { "无标题" } + "\n\n" + body
-                                    context.startActivity(
-                                        Intent.createChooser(
-                                            Intent(Intent.ACTION_SEND).apply {
-                                                type = "text/plain"
-                                                putExtra(Intent.EXTRA_TEXT, text)
+                                DropdownMenuItem(
+                                    text = { Text(if (currentNote?.starred == true) "取消加星" else "加星") },
+                                    leadingIcon = { Icon(Icons.Outlined.Star, null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        currentNote?.let {
+                                            scope.launch { repository.setStarred(it.id, !it.starred) }
+                                        }
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("文件夹") },
+                                    leadingIcon = { Icon(Icons.Outlined.List, null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        folderDialog = true
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("标签") },
+                                    leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        tagDialog = true
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (currentNote?.reminderAt != null) "修改提醒" else "设置提醒") },
+                                    leadingIcon = { Icon(Icons.Outlined.DateRange, null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        if (
+                                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                            ContextCompat.checkSelfPermission(
+                                                context,
+                                                Manifest.permission.POST_NOTIFICATIONS,
+                                            ) != PackageManager.PERMISSION_GRANTED
+                                        ) {
+                                            notificationPermission.launch(
+                                                Manifest.permission.POST_NOTIFICATIONS,
+                                            )
+                                        }
+                                        val base = currentNote?.reminderAt
+                                            ?: (System.currentTimeMillis() + 3_600_000)
+                                        val calendar = Calendar.getInstance().apply { timeInMillis = base }
+                                        DatePickerDialog(
+                                            context,
+                                            { _, year, month, day ->
+                                                val date = Calendar.getInstance().apply {
+                                                    set(year, month, day, 9, 0, 0)
+                                                }
+                                                TimePickerDialog(
+                                                    context,
+                                                    { _, hour, minute ->
+                                                        date.set(Calendar.HOUR_OF_DAY, hour)
+                                                        date.set(Calendar.MINUTE, minute)
+                                                        val at = date.timeInMillis
+                                                        currentNote?.let { note ->
+                                                            scope.launch {
+                                                                repository.setReminder(note.id, at)
+                                                                ReminderScheduler.schedule(
+                                                                    context,
+                                                                    note.id,
+                                                                    title,
+                                                                    at,
+                                                                )
+                                                            }
+                                                        }
+                                                    },
+                                                    calendar.get(Calendar.HOUR_OF_DAY),
+                                                    calendar.get(Calendar.MINUTE),
+                                                    true,
+                                                ).show()
                                             },
-                                            "分享笔记",
-                                        ),
+                                            calendar.get(Calendar.YEAR),
+                                            calendar.get(Calendar.MONTH),
+                                            calendar.get(Calendar.DAY_OF_MONTH),
+                                        ).show()
+                                    },
+                                )
+                                if (currentNote?.reminderAt != null) {
+                                    DropdownMenuItem(
+                                        text = { Text("清除提醒") },
+                                        leadingIcon = { Icon(Icons.Outlined.Close, null) },
+                                        onClick = {
+                                            menuOpen = false
+                                            currentNote?.let {
+                                                scope.launch { repository.setReminder(it.id, null) }
+                                                ReminderScheduler.cancel(context, it.id)
+                                            }
+                                        },
                                     )
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("分享长图") },
-                                leadingIcon = { Icon(Icons.Outlined.Share, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    ShareImage.share(context, title, body)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("导出单文件 HTML") },
-                                leadingIcon = { Icon(Icons.Outlined.Share, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    singleFileExporter.launch(
-                                        "${title.ifBlank { "曲阳便签" }}.html",
-                                    )
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("移到回收站") },
-                                leadingIcon = { Icon(Icons.Outlined.Delete, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    deleteConfirm = true
-                                },
-                            )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text("分享文本") },
+                                    leadingIcon = { Icon(Icons.Outlined.Share, null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        val text = title.ifBlank { "无标题" } + "\n\n" + body
+                                        context.startActivity(
+                                            Intent.createChooser(
+                                                Intent(Intent.ACTION_SEND).apply {
+                                                    type = "text/plain"
+                                                    putExtra(Intent.EXTRA_TEXT, text)
+                                                },
+                                                "分享笔记",
+                                            ),
+                                        )
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("分享长图") },
+                                    leadingIcon = { Icon(Icons.Outlined.Share, null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        ShareImage.share(context, title, body)
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("导出单文件 HTML") },
+                                    leadingIcon = { Icon(Icons.Outlined.Share, null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        singleFileExporter.launch(
+                                            "${title.ifBlank { "曲阳便签" }}.html",
+                                        )
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("移到回收站") },
+                                    leadingIcon = { Icon(Icons.Outlined.Delete, null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        deleteConfirm = true
+                                    },
+                                )
+                            }
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
-            )
+                }
+            }
+        },
+        bottomBar = {
+            if (!preview) {
+                EditorFormatToolbar(
+                    modifier = Modifier.navigationBarsPadding(),
+                    onInsert = { prefix, suffix, multiline ->
+                        format = NoteFormat.MARKDOWN
+                        setBodyWithHistory(
+                            if (multiline) {
+                                if (body.isBlank() || body.endsWith('\n')) {
+                                    "$body$prefix"
+                                } else {
+                                    "$body\n$prefix"
+                                }
+                            } else {
+                                "$body$prefix${suffix.orEmpty()}"
+                            },
+                        )
+                    },
+                )
+            }
         },
     ) { padding ->
         RuledPaper(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
+            lineSpacing = 32.dp,
+            paperColor = EditorPaper,
+            lineColor = EditorRule.copy(alpha = 0.7f),
+            marginColor = EditorRule.copy(alpha = 0.78f),
         ) {
             Column(
                 modifier = Modifier
@@ -429,76 +567,195 @@ fun EditorScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        .height(32.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    NoteFormat.entries.forEach { mode ->
-                        FilterChip(
-                            selected = format == mode,
-                            onClick = {
-                                format = mode
-                                preview = false
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(24.dp)
+                            .border(
+                                width = 1.dp,
+                                color = EditorRule,
+                                shape = RoundedCornerShape(3.dp),
+                            )
+                            .clickable { folderDialog = true }
+                            .padding(horizontal = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("▤", color = EditorMutedInk, fontSize = 13.sp)
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            text = currentFolder?.name ?: "全部便签",
+                            modifier = Modifier.weight(1f),
+                            color = EditorMutedInk,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text("▾", color = EditorMutedInk, fontSize = 11.sp)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = editorTimestamp(
+                            currentNote?.updatedAt ?: System.currentTimeMillis(),
+                        ),
+                        color = EditorMutedInk,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = " | $characterCount",
+                        color = EditorMutedInk,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                    )
+                    IconButton(
+                        onClick = {
+                            currentNote?.let {
+                                scope.launch { repository.setStarred(it.id, !it.starred) }
+                            }
+                        },
+                        modifier = Modifier.size(28.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Star,
+                            contentDescription = if (currentNote?.starred == true) {
+                                "取消加星"
+                            } else {
+                                "加星"
                             },
-                            label = {
-                                Text(
-                                    when (mode) {
-                                        NoteFormat.TEXT -> "文本"
-                                        NoteFormat.MARKDOWN -> "Markdown"
-                                        NoteFormat.CHECKLIST -> "待办"
-                                    },
-                                )
+                            tint = if (currentNote?.starred == true) {
+                                Color(0xFFD19B3D)
+                            } else {
+                                EditorRule
                             },
-                            leadingIcon = {
-                                if (mode == NoteFormat.CHECKLIST) {
-                                    Icon(Icons.Outlined.List, null, Modifier.size(18.dp))
-                                }
-                            },
+                            modifier = Modifier.size(19.dp),
                         )
                     }
+                    Box {
+                        Row(
+                            modifier = Modifier
+                                .height(24.dp)
+                                .background(
+                                    color = Color(0xFFFFE8B2),
+                                    shape = RoundedCornerShape(3.dp),
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = Color(0xFFE2BC62),
+                                    shape = RoundedCornerShape(3.dp),
+                                )
+                                .clickable { formatMenuOpen = true }
+                                .padding(horizontal = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = when (format) {
+                                    NoteFormat.TEXT -> "TXT"
+                                    NoteFormat.MARKDOWN -> "MD"
+                                    NoteFormat.CHECKLIST -> "待办"
+                                },
+                                color = Color(0xFFB06B1C),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = formatMenuOpen,
+                            onDismissRequest = { formatMenuOpen = false },
+                        ) {
+                            NoteFormat.entries.forEach { mode ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            when (mode) {
+                                                NoteFormat.TEXT -> "纯文本"
+                                                NoteFormat.MARKDOWN -> "Markdown"
+                                                NoteFormat.CHECKLIST -> "待办清单"
+                                            },
+                                        )
+                                    },
+                                    onClick = {
+                                        format = mode
+                                        preview = false
+                                        formatMenuOpen = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    Text(" ▾", color = EditorRule, fontSize = 11.sp)
                 }
 
                 if (!preview) {
-                    TextField(
+                    BasicTextField(
                         value = title,
                         onValueChange = ::setTitleWithHistory,
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("标题", style = MaterialTheme.typography.headlineMedium) },
-                        textStyle = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(32.dp)
+                            .clipToBounds(),
+                        textStyle = TextStyle(
+                            color = EditorInk,
+                            fontSize = 24.sp,
+                            lineHeight = 32.sp,
+                            fontWeight = FontWeight.Bold,
                         ),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                        ),
-                        singleLine = false,
+                        singleLine = true,
+                        cursorBrush = SolidColor(EditorInk),
+                        decorationBox = { innerTextField ->
+                            if (title.isBlank()) {
+                                Text(
+                                    text = "标题",
+                                    color = EditorMutedInk.copy(alpha = 0.55f),
+                                    fontSize = 24.sp,
+                                    lineHeight = 32.sp,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            innerTextField()
+                        },
                     )
-                    TextField(
+                    BasicTextField(
                         value = body,
                         onValueChange = ::setBodyWithHistory,
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
-                        placeholder = { Text("开始记录…") },
-                        textStyle = MaterialTheme.typography.bodyLarge,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
+                        textStyle = TextStyle(
+                            color = EditorInk,
+                            fontSize = 20.sp,
+                            lineHeight = 32.sp,
                         ),
                         keyboardOptions = KeyboardOptions(
                             capitalization = KeyboardCapitalization.Sentences,
                         ),
+                        cursorBrush = SolidColor(EditorInk),
+                        decorationBox = { innerTextField ->
+                            if (body.isBlank()) {
+                                Text(
+                                    text = "开始记录…",
+                                    color = EditorMutedInk.copy(alpha = 0.52f),
+                                    fontSize = 20.sp,
+                                    lineHeight = 32.sp,
+                                )
+                            }
+                            innerTextField()
+                        },
                     )
                 } else {
                     Text(
                         text = title.ifBlank { "无标题" },
-                        modifier = Modifier.padding(vertical = 12.dp),
-                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(32.dp),
+                        color = EditorInk,
+                        fontSize = 24.sp,
+                        lineHeight = 32.sp,
                         fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     MarkdownPreview(
                         markdown = body,
@@ -508,18 +765,6 @@ fun EditorScreen(
                     )
                 }
 
-                if (format != NoteFormat.TEXT && !preview) {
-                    FormattingBar(
-                        onInsert = { prefix, suffix, multiline ->
-                            setBodyWithHistory(if (multiline) {
-                                if (body.isBlank() || body.endsWith('\n')) "$body$prefix"
-                                else "$body\n$prefix"
-                            } else {
-                                "$body$prefix${suffix.orEmpty()}"
-                            })
-                        },
-                    )
-                }
                 if (attachments.isNotEmpty()) {
                     AttachmentStrip(
                         attachments = attachments,
@@ -541,13 +786,64 @@ fun EditorScreen(
                         onDelete = { attachmentToDelete = it },
                     )
                 }
-                Text(
-                    text = "已自动保存 · ${attachments.size} 个附件",
-                    modifier = Modifier.padding(vertical = 8.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF676B66),
-                )
             }
+        }
+    }
+
+    if (shareSheetOpen) {
+        val shareText = noteShareText(title, body)
+        ModalBottomSheet(
+            onDismissRequest = { shareSheetOpen = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = EditorShareSheet,
+            contentColor = Color(0xFF4D4B48),
+            shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+            dragHandle = null,
+        ) {
+            ShareActionSheet(
+                onClose = { shareSheetOpen = false },
+                onCopyText = {
+                    context.getSystemService(ClipboardManager::class.java)
+                        .setPrimaryClip(ClipData.newPlainText("曲阳便签", shareText))
+                    shareSheetOpen = false
+                    Toast.makeText(context, "文字已复制", Toast.LENGTH_SHORT).show()
+                },
+                onShareText = {
+                    shareSheetOpen = false
+                    context.startActivity(
+                        Intent.createChooser(
+                            Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, shareText)
+                            },
+                            "以文字形式分享",
+                        ),
+                    )
+                },
+                onShareImage = {
+                    shareSheetOpen = false
+                    ShareImage.share(context, title, body)
+                },
+                onSendEmail = {
+                    shareSheetOpen = false
+                    runCatching {
+                        context.startActivity(
+                            Intent.createChooser(
+                                Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")).apply {
+                                    putExtra(
+                                        Intent.EXTRA_SUBJECT,
+                                        title.ifBlank { "曲阳便签" },
+                                    )
+                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                },
+                                "发送邮件",
+                            ),
+                        )
+                    }.onFailure {
+                        Toast.makeText(context, "未找到可用的邮件应用", Toast.LENGTH_SHORT).show()
+                    }
+                },
+            )
         }
     }
 
@@ -647,25 +943,288 @@ fun EditorScreen(
 }
 
 @Composable
-private fun FormattingBar(
-    onInsert: (prefix: String, suffix: String?, multiline: Boolean) -> Unit,
+private fun ShareActionSheet(
+    onClose: () -> Unit,
+    onCopyText: () -> Unit,
+    onShareText: () -> Unit,
+    onShareImage: () -> Unit,
+    onSendEmail: () -> Unit,
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .navigationBarsPadding()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
-        OutlinedButton(onClick = { onInsert("# ", null, true) }) { Text("H1") }
-        OutlinedButton(onClick = { onInsert("**", "**", false) }) { Text("B") }
-        OutlinedButton(onClick = { onInsert("- ", null, true) }) { Text("• 列表") }
-        OutlinedButton(onClick = { onInsert("- [ ] ", null, true) }) { Text("☐ 待办") }
-        OutlinedButton(onClick = { onInsert("[链接文字](https://)", null, false) }) {
-            Text("链接")
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(58.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "请选择操作",
+                color = Color(0xFF4F4D4B),
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            ) {
+                Icon(
+                    Icons.Outlined.Close,
+                    contentDescription = "关闭",
+                    tint = Color(0xFF7A7875),
+                )
+            }
         }
-        OutlinedButton(onClick = { onInsert("`代码`", null, false) }) { Text("代码") }
+        Spacer(Modifier.height(8.dp))
+        ShareActionButton("复制文字", onCopyText)
+        Spacer(Modifier.height(14.dp))
+        ShareActionButton("以文字形式分享", onShareText)
+        Spacer(Modifier.height(14.dp))
+        ShareActionButton("以图片形式分享", onShareImage)
+        Spacer(Modifier.height(14.dp))
+        ShareActionButton("发送邮件", onSendEmail)
     }
+}
+
+@Composable
+private fun ShareActionButton(
+    label: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(66.dp)
+            .clickable(onClick = onClick),
+        color = Color(0xFFFFFEFC),
+        contentColor = Color(0xFF625F5C),
+        shape = RoundedCornerShape(8.dp),
+        shadowElevation = 1.dp,
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = label,
+                fontSize = 21.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SendPlaneGlyph(modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val color = Color(0xFFFFF8EA)
+        val stroke = 1.8.dp.toPx()
+        val plane = Path().apply {
+            moveTo(size.width * 0.08f, size.height * 0.5f)
+            lineTo(size.width * 0.92f, size.height * 0.08f)
+            lineTo(size.width * 0.68f, size.height * 0.9f)
+            lineTo(size.width * 0.47f, size.height * 0.61f)
+            close()
+        }
+        drawPath(
+            path = plane,
+            color = color,
+            style = Stroke(
+                width = stroke,
+                join = StrokeJoin.Round,
+            ),
+        )
+        drawLine(
+            color = color,
+            start = Offset(size.width * 0.47f, size.height * 0.61f),
+            end = Offset(size.width * 0.92f, size.height * 0.08f),
+            strokeWidth = stroke,
+        )
+    }
+}
+
+private fun noteShareText(title: String, body: String): String =
+    title.ifBlank { "无标题" } + "\n\n" + body
+
+@Composable
+private fun EditorFormatToolbar(
+    modifier: Modifier = Modifier,
+    onInsert: (prefix: String, suffix: String?, multiline: Boolean) -> Unit,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = EditorFormatBar,
+        contentColor = EditorAccent,
+        shadowElevation = 5.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(68.dp)
+                .padding(horizontal = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            EditorFormatButton(
+                label = "标题",
+                modifier = Modifier.weight(1f),
+                onClick = { onInsert("# ", null, true) },
+            ) {
+                Text(
+                    text = "H",
+                    color = EditorAccent,
+                    fontSize = 25.sp,
+                    lineHeight = 25.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            EditorToolbarDivider()
+            EditorFormatButton(
+                label = "居中",
+                modifier = Modifier.weight(1f),
+                onClick = { onInsert("<center>居中文字</center>", null, true) },
+            ) {
+                CenterLinesGlyph()
+            }
+            EditorToolbarDivider()
+            EditorFormatButton(
+                label = "列表",
+                modifier = Modifier.weight(1f),
+                onClick = { onInsert("- ", null, true) },
+            ) {
+                ListGlyph()
+            }
+            EditorToolbarDivider()
+            EditorFormatButton(
+                label = "粗体",
+                modifier = Modifier.weight(1f),
+                onClick = { onInsert("**", "**", false) },
+            ) {
+                Text(
+                    text = "B",
+                    color = EditorAccent,
+                    fontSize = 25.sp,
+                    lineHeight = 25.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            EditorToolbarDivider()
+            EditorFormatButton(
+                label = "引用",
+                modifier = Modifier.weight(1f),
+                onClick = { onInsert("> ", null, true) },
+            ) {
+                Text(
+                    text = "❝",
+                    color = EditorAccent,
+                    fontSize = 25.sp,
+                    lineHeight = 25.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            EditorToolbarDivider()
+            EditorFormatButton(
+                label = "待办事项",
+                modifier = Modifier.weight(1.25f),
+                onClick = { onInsert("- [ ] ", null, true) },
+            ) {
+                Text(
+                    text = "☑",
+                    color = EditorAccent,
+                    fontSize = 24.sp,
+                    lineHeight = 25.sp,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditorFormatButton(
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    glyph: @Composable () -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .height(64.dp)
+            .clickable(onClick = onClick)
+            .padding(top = 6.dp, bottom = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            modifier = Modifier.size(width = 28.dp, height = 28.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            glyph()
+        }
+        Text(
+            text = label,
+            color = EditorAccent,
+            fontSize = 10.sp,
+            lineHeight = 13.sp,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun EditorToolbarDivider() {
+    Box(
+        Modifier
+            .width(1.dp)
+            .height(42.dp)
+            .background(Color(0xFFD7B976).copy(alpha = 0.7f)),
+    )
+}
+
+@Composable
+private fun CenterLinesGlyph() {
+    Canvas(Modifier.size(25.dp)) {
+        val color = EditorAccent
+        val stroke = 2.dp.toPx()
+        drawLine(color, Offset(size.width * 0.16f, size.height * 0.2f), Offset(size.width * 0.84f, size.height * 0.2f), stroke)
+        drawLine(color, Offset(size.width * 0.3f, size.height * 0.52f), Offset(size.width * 0.7f, size.height * 0.52f), stroke)
+        drawLine(color, Offset(size.width * 0.16f, size.height * 0.84f), Offset(size.width * 0.84f, size.height * 0.84f), stroke)
+    }
+}
+
+@Composable
+private fun ListGlyph() {
+    Canvas(Modifier.size(25.dp)) {
+        val color = EditorAccent
+        val stroke = 2.dp.toPx()
+        listOf(0.2f, 0.5f, 0.8f).forEach { y ->
+            drawCircle(color, radius = 1.7.dp.toPx(), center = Offset(size.width * 0.18f, size.height * y))
+            drawLine(
+                color = color,
+                start = Offset(size.width * 0.34f, size.height * y),
+                end = Offset(size.width * 0.84f, size.height * y),
+                strokeWidth = stroke,
+            )
+        }
+    }
+}
+
+private fun editorTimestamp(value: Long): String {
+    val dateTime = Instant.ofEpochMilli(value).atZone(ZoneId.systemDefault())
+    val day = if (dateTime.toLocalDate() == LocalDate.now()) {
+        "今天"
+    } else {
+        dateTime.format(editorDateFormatter)
+    }
+    return "$day ${dateTime.format(editorClockFormatter)}"
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 @Composable

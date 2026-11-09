@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -14,11 +15,14 @@ import androidx.compose.ui.unit.dp
 fun RuledPaper(
     modifier: Modifier = Modifier,
     lineSpacing: Dp = 34.dp,
+    paperColor: Color? = null,
+    lineColor: Color? = null,
+    marginColor: Color? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val paper = MaterialTheme.colorScheme.surface
-    val line = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
-    val margin = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.34f)
+    val paper = paperColor ?: MaterialTheme.colorScheme.surface
+    val line = lineColor ?: MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+    val margin = marginColor ?: MaterialTheme.colorScheme.tertiary.copy(alpha = 0.34f)
     Box(
         modifier = modifier.drawBehind {
             drawRect(paper)

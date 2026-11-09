@@ -15,6 +15,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 
@@ -31,6 +32,18 @@ fun MarkdownPreview(
             markdown.lines().forEach { rawLine ->
                 val line = rawLine.trimEnd()
                 when {
+                    line.trimStart().startsWith("<center>") &&
+                        line.trimEnd().endsWith("</center>") -> {
+                        val centered = line.trim()
+                            .removePrefix("<center>")
+                            .removeSuffix("</center>")
+                        Text(
+                            text = inlineMarkdown(centered),
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                     line.startsWith("# ") -> Text(
                         text = inlineMarkdown(line.removePrefix("# ")),
                         style = MaterialTheme.typography.headlineSmall,
