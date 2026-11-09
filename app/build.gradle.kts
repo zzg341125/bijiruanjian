@@ -15,7 +15,7 @@ android {
         ?: 1
     val releaseVersionName = providers.gradleProperty("versionName")
         .orNull
-        ?: "0.2.2"
+        ?: "0.2.3"
 
     defaultConfig {
         applicationId = "io.github.latticenotes"
