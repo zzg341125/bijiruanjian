@@ -80,7 +80,7 @@ class WebDavClient(private val config: WebDavConfig) {
         connection.connectTimeout = 15_000
         connection.readTimeout = 30_000
         connection.instanceFollowRedirects = true
-        connection.setRequestProperty("User-Agent", "QuyangNotes/0.3.1")
+        connection.setRequestProperty("User-Agent", "QuyangNotes/0.4.0")
         if (config.username.isNotBlank() || config.password.isNotBlank()) {
             val token = Base64.getEncoder().encodeToString(
                 "${config.username}:${config.password}".toByteArray(Charsets.UTF_8),

@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import androidx.core.graphics.drawable.toBitmap
 import io.github.latticenotes.R
 import io.github.latticenotes.data.AttachmentEntity
+import io.github.latticenotes.util.AttachmentReferences
+import io.github.latticenotes.util.isImageAttachment
 import java.io.ByteArrayOutputStream
 import java.util.Base64
 
@@ -27,14 +29,14 @@ object SingleFileExporter {
         iconDataUri: String? = null,
     ): String {
         val safeTitle = escape(title.ifBlank { "无标题" })
-        val sections = attachments.joinToString("\n") { attachment ->
+        fun renderAttachment(attachment: AttachmentEntity): String {
             val encoded = attachment.embeddedData
-            if (encoded == null) {
+            return if (encoded == null) {
                 "<p class=\"missing\">附件未嵌入：${escape(attachment.name)}</p>"
-            } else if (attachment.mimeType?.startsWith("image/") == true) {
+            } else if (attachment.isImageAttachment()) {
                 """
                 <figure>
-                  <img src="data:${escapeAttribute(attachment.mimeType)};base64,$encoded"
+                  <img src="data:${escapeAttribute(attachment.mimeType ?: "image/*")};base64,$encoded"
                        alt="${escapeAttribute(attachment.name)}">
                   <figcaption>${escape(attachment.name)}</figcaption>
                 </figure>
@@ -47,6 +49,28 @@ object SingleFileExporter {
                 """.trimIndent()
             }
         }
+
+        val attachmentsById = attachments.associateBy { it.id }
+        val references = AttachmentReferences.references(body)
+        val renderedBody = buildString {
+            var cursor = 0
+            references.forEach { reference ->
+                if (reference.range.first > cursor) {
+                    append(escape(body.substring(cursor, reference.range.first)))
+                }
+                attachmentsById[reference.attachmentId]?.let { attachment ->
+                    append("\n")
+                    append(renderAttachment(attachment))
+                    append("\n")
+                }
+                cursor = reference.range.last + 1
+            }
+            if (cursor < body.length) append(escape(body.substring(cursor)))
+        }
+        val embeddedIds = references.map { it.attachmentId }.toSet()
+        val sections = attachments
+            .filterNot { it.id in embeddedIds && it.isImageAttachment() }
+            .joinToString("\n", transform = ::renderAttachment)
         return """
             <!doctype html>
             <html lang="zh-CN">
@@ -98,7 +122,7 @@ object SingleFileExporter {
                   <strong>曲阳便签 · 单文件</strong>
                 </div>
                 <h1>$safeTitle</h1>
-                <div class="body">${escape(body)}</div>
+                <div class="body">$renderedBody</div>
                 $sections
                 <footer>由曲阳便签导出 · 图片和附件已嵌入此 HTML 文件</footer>
               </main>

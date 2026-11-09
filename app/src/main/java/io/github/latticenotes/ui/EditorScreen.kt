@@ -39,7 +39,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowBack
@@ -89,7 +88,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -104,6 +102,8 @@ import io.github.latticenotes.data.NoteFormat
 import io.github.latticenotes.data.NotesRepository
 import io.github.latticenotes.reminder.ReminderScheduler
 import io.github.latticenotes.share.ShareImage
+import io.github.latticenotes.util.AttachmentReferences
+import io.github.latticenotes.util.isImageAttachment
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -245,7 +245,29 @@ fun EditorScreen(
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
         scope.launch {
-            uris.forEach { repository.addAttachment(noteId, it) }
+            var nextBody = body
+            var insertedImages = 0
+            uris.forEach { uri ->
+                val attachment = repository.addAttachment(noteId, uri) ?: return@forEach
+                if (attachment.isImageAttachment()) {
+                    nextBody = AttachmentReferences.appendToBody(
+                        nextBody,
+                        AttachmentReferences.imageMarkdown(
+                            attachment.id,
+                            attachment.name,
+                        ),
+                    )
+                    insertedImages++
+                }
+            }
+            if (nextBody != body) {
+                setBodyWithHistory(nextBody)
+                Toast.makeText(
+                    context,
+                    "已插入 $insertedImages 张图片到便签正文",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
         }
     }
     val singleFileExporter = rememberLauncherForActivityResult(
@@ -277,7 +299,11 @@ fun EditorScreen(
         ActivityResultContracts.RequestPermission(),
     ) {}
     val currentFolder = folders.firstOrNull { it.id == currentNote?.folderId }
-    val characterCount = body.count { !it.isWhitespace() }
+    val characterCount = AttachmentReferences.plainText(body).count { !it.isWhitespace() }
+    val referencedImageIds = AttachmentReferences.referencedImageIds(body)
+    val attachmentsOutsideDocument = attachments.filter { attachment ->
+        !attachment.isImageAttachment() || attachment.id !in referencedImageIds
+    }
 
     Scaffold(
         modifier = Modifier
@@ -321,14 +347,19 @@ fun EditorScreen(
                                 },
                             )
                         }
-                        IconButton(
+                        TextButton(
                             onClick = ::redo,
                             enabled = history.canRedo,
-                            modifier = Modifier.size(40.dp),
+                            modifier = Modifier
+                                .width(58.dp)
+                                .height(40.dp),
+                            contentPadding = PaddingValues(horizontal = 4.dp),
                         ) {
                             Text(
-                                text = "↷",
-                                style = MaterialTheme.typography.headlineSmall,
+                                text = "重做",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
                                 color = if (history.canRedo) {
                                     Color(0xFFFFF8EA)
                                 } else {
@@ -725,33 +756,27 @@ fun EditorScreen(
                             innerTextField()
                         },
                     )
-                    BasicTextField(
-                        value = body,
-                        onValueChange = ::setBodyWithHistory,
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
-                        textStyle = TextStyle(
-                            color = EditorInk,
-                            fontSize = 20.sp,
-                            lineHeight = 32.sp,
-                        ),
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Sentences,
-                        ),
-                        cursorBrush = SolidColor(EditorInk),
-                        decorationBox = { innerTextField ->
-                            if (body.isBlank()) {
-                                Text(
-                                    text = "开始记录…",
-                                    color = EditorMutedInk.copy(alpha = 0.52f),
-                                    fontSize = 20.sp,
-                                    lineHeight = 32.sp,
-                                )
-                            }
-                            innerTextField()
-                        },
-                    )
+                    ) {
+                        if (body.isBlank()) {
+                            Text(
+                                text = "开始记录…",
+                                color = EditorMutedInk.copy(alpha = 0.52f),
+                                fontSize = 20.sp,
+                                lineHeight = 32.sp,
+                            )
+                        }
+                        InlineDocumentEditor(
+                            value = body,
+                            onValueChange = ::setBodyWithHistory,
+                            attachments = attachments,
+                            textColor = EditorInk,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 } else {
                     Text(
                         text = title.ifBlank { "无标题" },
@@ -767,15 +792,16 @@ fun EditorScreen(
                     )
                     MarkdownPreview(
                         markdown = body,
+                        attachments = attachments,
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
                     )
                 }
 
-                if (attachments.isNotEmpty()) {
+                if (attachmentsOutsideDocument.isNotEmpty()) {
                     AttachmentStrip(
-                        attachments = attachments,
+                        attachments = attachmentsOutsideDocument,
                         onOpen = { attachment ->
                             runCatching {
                                 val uri = FileProvider.getUriForFile(
@@ -830,7 +856,11 @@ fun EditorScreen(
                 },
                 onShareImage = {
                     shareSheetOpen = false
-                    ShareImage.share(context, title, body)
+                    ShareImage.share(
+                        context,
+                        title,
+                        AttachmentReferences.plainText(body),
+                    )
                 },
                 onSendEmail = {
                     shareSheetOpen = false
@@ -1056,7 +1086,7 @@ private fun SendPlaneGlyph(modifier: Modifier = Modifier) {
 }
 
 private fun noteShareText(title: String, body: String): String =
-    title.ifBlank { "无标题" } + "\n\n" + body
+    title.ifBlank { "无标题" } + "\n\n" + AttachmentReferences.plainText(body)
 
 @Composable
 private fun EditorFormatToolbar(

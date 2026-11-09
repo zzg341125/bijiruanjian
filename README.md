@@ -19,7 +19,8 @@
 - 顶部分类菜单：全部、加星、文件夹、回收站及实时数量
 - 置顶、加星、软删除、恢复和永久删除
 - 标题与正文搜索，本地知识检索
-- 图片及任意文档附件
+- 图片可直接嵌入便签正文，并随文档预览和导出
+- 任意文档附件
 - 图片附件可嵌入 WebDAV/JSON 备份
 - 导出正文、图片和内置图标合并的单文件 HTML
 - 直接批量导入 `.md` 文件
@@ -80,8 +81,8 @@ app/build/outputs/apk/debug/app-debug.apk
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.3.1
-git push origin v0.3.1
+git tag v0.4.0
+git push origin v0.4.0
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。

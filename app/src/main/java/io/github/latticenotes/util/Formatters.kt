@@ -13,6 +13,7 @@ fun formatTimestamp(value: Long): String =
 
 fun notePreview(body: String, limit: Int = 180): String =
     body
+        .replace(Regex("""!\[[^\]]*]\(quyang-attachment://\d+\)"""), "")
         .replace(Regex("^#{1,6}\\s*", RegexOption.MULTILINE), "")
         .replace(Regex("^[-*]\\s+\\[[ xX]]\\s*", RegexOption.MULTILINE), "")
         .replace(Regex("^[-*]\\s+", RegexOption.MULTILINE), "")

@@ -3,11 +3,13 @@ package io.github.latticenotes.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -18,10 +20,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import io.github.latticenotes.data.AttachmentEntity
+import io.github.latticenotes.util.AttachmentReferences
+import io.github.latticenotes.util.isImageAttachment
+import java.io.File
 
 @Composable
 fun MarkdownPreview(
     markdown: String,
+    attachments: List<AttachmentEntity> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     SelectionContainer(modifier = modifier) {
@@ -32,6 +40,30 @@ fun MarkdownPreview(
             markdown.lines().forEach { rawLine ->
                 val line = rawLine.trimEnd()
                 when {
+                    AttachmentReferences.references(line).singleOrNull()
+                        ?.let { it.range.first == 0 && it.range.last == line.lastIndex } == true -> {
+                        val attachmentId = AttachmentReferences.references(line)
+                            .single()
+                            .attachmentId
+                        val attachment = attachments.firstOrNull {
+                            it.id == attachmentId && it.isImageAttachment()
+                        }
+                        if (attachment != null) {
+                            AsyncImage(
+                                model = File(android.net.Uri.parse(attachment.uri).path.orEmpty()),
+                                contentDescription = attachment.name,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 120.dp, max = 520.dp),
+                                contentScale = ContentScale.Fit,
+                            )
+                        } else {
+                            Text(
+                                text = "图片未找到：${attachmentId}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     line.trimStart().startsWith("<center>") &&
                         line.trimEnd().endsWith("</center>") -> {
                         val centered = line.trim()

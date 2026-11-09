@@ -85,6 +85,7 @@ import io.github.latticenotes.data.FolderEntity
 import io.github.latticenotes.data.NoteEntity
 import io.github.latticenotes.data.NoteFormat
 import io.github.latticenotes.data.NotesRepository
+import io.github.latticenotes.util.AttachmentReferences
 import io.github.latticenotes.util.formatTimestamp
 import io.github.latticenotes.util.notePreview
 import kotlinx.coroutines.launch
@@ -463,7 +464,7 @@ fun HomeScreen(
                                 },
                                 onShare = {
                                     val text = note.title.ifBlank { "无标题" } +
-                                        "\n\n" + note.body
+                                        "\n\n" + AttachmentReferences.plainText(note.body)
                                     context.startActivity(
                                         Intent.createChooser(
                                             Intent(Intent.ACTION_SEND).apply {

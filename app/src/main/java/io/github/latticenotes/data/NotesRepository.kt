@@ -94,7 +94,7 @@ class NotesRepository(
         dao.deleteFolder(id)
     }
 
-    suspend fun addAttachment(noteId: Long, source: Uri): Long? {
+    suspend fun addAttachment(noteId: Long, source: Uri): AttachmentEntity? {
         val resolver = context.contentResolver
         val mime = resolver.getType(source)
         val originalName = resolver.query(
@@ -122,14 +122,13 @@ class NotesRepository(
         }.getOrDefault(false)
         if (!copied) return null
 
-        return dao.insertAttachment(
-            AttachmentEntity(
-                noteId = noteId,
-                uri = Uri.fromFile(destination).toString(),
-                name = originalName,
-                mimeType = mime,
-            ),
+        val attachment = AttachmentEntity(
+            noteId = noteId,
+            uri = Uri.fromFile(destination).toString(),
+            name = originalName,
+            mimeType = mime,
         )
+        return attachment.copy(id = dao.insertAttachment(attachment))
     }
 
     suspend fun removeAttachment(attachment: AttachmentEntity) {
