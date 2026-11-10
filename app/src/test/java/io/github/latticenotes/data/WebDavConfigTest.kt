@@ -48,11 +48,67 @@ class WebDavConfigTest {
     }
 
     @Test
-    fun directoryUrl_normalizesTrailingSlash() {
+    fun existingSubfolder_isUsedDirectly() {
         val url = WebDavConfig(
             "https://dav.jianguoyun.com/dav/biji",
             "u",
             "p",
+        ).directoryUrl()
+
+        assertEquals(
+            "https://dav.jianguoyun.com/dav/biji/",
+            url.toString(),
+        )
+    }
+
+    @Test
+    fun jianguoyunRoot_usesDedicatedSyncFolder() {
+        val url = WebDavConfig(
+            "https://dav.jianguoyun.com/dav/",
+            "user@example.com",
+            "app-password",
+        ).directoryUrl()
+
+        assertEquals(
+            "https://dav.jianguoyun.com/dav/%E6%9B%B2%E9%98%B3%E4%BE%BF%E7%AD%BE/",
+            url.toString(),
+        )
+    }
+
+    @Test
+    fun dedicatedSyncFolder_isNotAppendedTwice() {
+        val url = WebDavConfig(
+            "https://dav.jianguoyun.com/dav/曲阳便签/",
+            "user@example.com",
+            "app-password",
+        ).directoryUrl()
+
+        assertEquals(
+            "https://dav.jianguoyun.com/dav/%E6%9B%B2%E9%98%B3%E4%BE%BF%E7%AD%BE/",
+            url.toString(),
+        )
+    }
+
+    @Test
+    fun copiedUrlWithInvisibleUnicodeCharacters_isNormalized() {
+        val url = WebDavConfig(
+            "\uFEFF \u200Bhttps://dav.jianguoyun.com/dav/\u2060 ",
+            "user@example.com",
+            "app-password",
+        ).directoryUrl()
+
+        assertEquals(
+            "https://dav.jianguoyun.com/dav/%E6%9B%B2%E9%98%B3%E4%BE%BF%E7%AD%BE/",
+            url.toString(),
+        )
+    }
+
+    @Test
+    fun existingJianguoyunFolder_isUsedWithoutNestedSyncFolder() {
+        val url = WebDavConfig(
+            "https://dav.jianguoyun.com/dav/biji/",
+            "user@example.com",
+            "app-password",
         ).directoryUrl()
 
         assertEquals(

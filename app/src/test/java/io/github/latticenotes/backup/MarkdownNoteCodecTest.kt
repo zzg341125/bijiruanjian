@@ -63,4 +63,34 @@ class MarkdownNoteCodecTest {
         assertFalse(markdown.contains("\"notes\""))
         assertEquals("note-3.md", MarkdownNoteCodec.fileName(3))
     }
+
+    @Test
+    fun nestedPlainMarkdownUsesFileBasenameAsTitle() {
+        val decoded = MarkdownNoteCodec.decode(
+            "正文",
+            "folder/nested-note.md",
+        )
+
+        assertEquals("nested-note", decoded!!.note.title)
+    }
+
+    @Test
+    fun appCreatedNoteUsesTitleForRemoteFileName() {
+        assertEquals(
+            "123.md",
+            MarkdownNoteCodec.fileNameForTitle("123", noteId = 9, usedNames = emptySet()),
+        )
+    }
+
+    @Test
+    fun duplicateTitleGetsStableSuffixInsteadOfOverwriting() {
+        assertEquals(
+            "会议记录 (9).md",
+            MarkdownNoteCodec.fileNameForTitle(
+                "会议记录",
+                noteId = 9,
+                usedNames = setOf("会议记录.md"),
+            ),
+        )
+    }
 }

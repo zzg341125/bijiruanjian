@@ -19,6 +19,27 @@ object MarkdownNoteCodec {
 
     fun fileName(noteId: Long): String = "note-$noteId.md"
 
+    fun fileNameForTitle(
+        title: String,
+        noteId: Long,
+        usedNames: Set<String>,
+    ): String {
+        val base = title
+            .replace(Regex("""[\\/:*?"<>|\u0000-\u001F]"""), "_")
+            .trim(' ', '.')
+            .take(80)
+            .ifBlank { "note-$noteId" }
+        var candidate = "$base.md"
+        if (candidate !in usedNames) return candidate
+        candidate = "$base ($noteId).md"
+        var suffix = 2
+        while (candidate in usedNames) {
+            candidate = "$base ($noteId-$suffix).md"
+            suffix++
+        }
+        return candidate
+    }
+
     fun encode(
         note: NoteEntity,
         attachments: List<AttachmentEntity>,
@@ -111,7 +132,10 @@ object MarkdownNoteCodec {
             body = body.substringAfter('\n', "").trimStart('\r', '\n')
         }
         val resolvedTitle = title.ifBlank {
-            sourceFileName.substringBeforeLast('.').ifBlank { "Markdown 记事" }
+            sourceFileName
+                .substringAfterLast('/')
+                .substringBeforeLast('.')
+                .ifBlank { "Markdown 记事" }
         }
         val note = NoteEntity(
             id = id,

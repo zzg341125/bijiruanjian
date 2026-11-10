@@ -3,13 +3,16 @@ package io.github.latticenotes.data
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import io.github.latticenotes.backup.DecodedMarkdownNote
 import io.github.latticenotes.backup.MarkdownNoteCodec
 import io.github.latticenotes.util.AttachmentReferences
+import org.json.JSONObject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.Base64
 
@@ -47,18 +50,27 @@ class NotesRepository(
     suspend fun getNote(id: Long): NoteEntity? = dao.getNote(id)
 
     suspend fun save(note: NoteEntity) {
+        val previous = dao.getNote(note.id)
         val updated = note.copy(updatedAt = System.currentTimeMillis())
         dao.upsert(updated)
-        writeMarkdownMirror(updated.id)
+        if (
+            !updated.syncAsBinary &&
+            previous != null &&
+            previous.title != updated.title
+        ) {
+            renameMarkdownMirror(updated)
+        } else {
+            writeMarkdownMirror(updated.id)
+        }
     }
 
     suspend fun duplicateNote(id: Long): Long? {
         val source = dao.getNote(id) ?: return null
         val now = System.currentTimeMillis()
-        return dao.insert(
+        val duplicateId = dao.insert(
             source.copy(
                 id = 0,
-                title = source.title.ifBlank { "Untitled" } + " copy",
+                title = source.title.ifBlank { "无标题" } + " 副本",
                 pinned = false,
                 createdAt = now,
                 updatedAt = now,
@@ -67,11 +79,13 @@ class NotesRepository(
                 reminderAt = null,
             ),
         )
+        writeMarkdownMirror(duplicateId)
+        return duplicateId
     }
 
     suspend fun moveToTrash(id: Long) {
         dao.moveToTrash(id)
-        writeMarkdownMirror(id)
+        deleteMarkdownMirror(id)
     }
 
     suspend fun restore(id: Long) {
@@ -257,11 +271,19 @@ class NotesRepository(
         dao.getAttachments(noteId).map(::withEmbeddedData)
 
     suspend fun getAllMarkdownFiles(): Map<String, String> = withContext(Dispatchers.IO) {
-        dao.getAllForBackup().forEach { writeMarkdownMirror(it.id) }
-        markdownDirectory()
-            .listFiles { file -> file.isFile && file.extension.equals("md", ignoreCase = true) }
-            .orEmpty()
-            .associate { it.name to it.readText() }
+        val notes = dao.getAllForBackup()
+        notes.filter { it.trashed }.forEach { deleteMarkdownMirror(it.id) }
+        notes.filterNot { it.trashed || it.syncAsBinary }
+            .forEach { writeMarkdownMirror(it.id) }
+        val directory = markdownDirectory()
+        directory
+            .walkTopDown()
+            .filter { file ->
+                file.isFile && file.extension.lowercase() in NOTE_FILE_EXTENSIONS
+            }
+            .associate { file ->
+                file.relativeTo(directory).invariantSeparatorsPath to file.readText()
+            }
     }
 
     suspend fun getMarkdownSyncStates(): Map<String, MarkdownSyncState> =
@@ -291,14 +313,27 @@ class NotesRepository(
             )
         }
 
-    suspend fun importMarkdownDocuments(documents: List<MarkdownNoteImport>) {
+    suspend fun importMarkdownDocuments(
+        documents: List<MarkdownNoteImport>,
+        forceOverwrite: Boolean = false,
+    ) {
         documents.forEach { imported ->
-            val document = imported.document
+            var document = imported.document
             val local = dao.getNote(document.note.id)
-            if (local != null && local.updatedAt >= document.note.updatedAt) {
+            if (
+                local != null &&
+                !forceOverwrite &&
+                local.updatedAt >= document.note.updatedAt
+            ) {
                 recordRemoteFileName(document.note.id, imported.fileName)
                 return@forEach
             }
+
+            if (document.note.id <= 0) {
+                val insertedId = dao.insert(document.note.copy(id = 0))
+                document = document.copy(note = document.note.copy(id = insertedId))
+            }
+            dao.upsert(document.note)
 
             val folderId = document.note.folderId
             if (
@@ -356,6 +391,147 @@ class NotesRepository(
         }
     }
 
+    suspend fun moveToTrashFromRemote(noteId: Long) {
+        dao.moveToTrash(noteId)
+        deleteMarkdownMirror(noteId)
+    }
+
+    suspend fun getBinarySyncStates(): Map<String, BinarySyncState> =
+        withContext(Dispatchers.IO) {
+            val file = File(markdownDirectory(), BINARY_SYNC_STATE_FILE)
+            if (!file.isFile) return@withContext emptyMap()
+            runCatching {
+                val root = JSONObject(file.readText())
+                buildMap {
+                    root.keys().forEach { name ->
+                        val value = root.getJSONObject(name)
+                        put(
+                            name,
+                            BinarySyncState(
+                                noteId = value.getLong("noteId"),
+                                attachmentId = value.getLong("attachmentId"),
+                                remoteFingerprint = value.optString("remoteFingerprint"),
+                                localHash = value.optString("localHash"),
+                            ),
+                        )
+                    }
+                }
+            }.getOrDefault(emptyMap())
+        }
+
+    suspend fun saveBinarySyncStates(states: Map<String, BinarySyncState>) =
+        withContext(Dispatchers.IO) {
+            val directory = markdownDirectory().apply { mkdirs() }
+            val root = JSONObject()
+            states.forEach { (name, state) ->
+                root.put(
+                    name,
+                    JSONObject().apply {
+                        put("noteId", state.noteId)
+                        put("attachmentId", state.attachmentId)
+                        put("remoteFingerprint", state.remoteFingerprint)
+                        put("localHash", state.localHash)
+                    },
+                )
+            }
+            File(directory, BINARY_SYNC_STATE_FILE).writeText(root.toString(2))
+        }
+
+    suspend fun readBinaryFile(state: BinarySyncState): ByteArray? =
+        withContext(Dispatchers.IO) {
+            val note = dao.getNote(state.noteId) ?: return@withContext null
+            if (note.trashed || !note.syncAsBinary) return@withContext null
+            val attachment = dao.getAttachments(state.noteId)
+                .firstOrNull { it.id == state.attachmentId }
+                ?: return@withContext null
+            val uri = Uri.parse(attachment.uri)
+            if (uri.scheme != "file") return@withContext null
+            File(uri.path ?: return@withContext null)
+                .takeIf(File::isFile)
+                ?.readBytes()
+        }
+
+    suspend fun storeRemoteBinaryFile(
+        remoteName: String,
+        bytes: ByteArray,
+        existing: BinarySyncState?,
+        remoteFingerprint: String,
+    ): BinarySyncState = withContext(Dispatchers.IO) {
+        val localHash = bytes.sha256()
+        val existingNote = existing?.let { dao.getNote(it.noteId) }
+        val existingAttachment = existing?.let { state ->
+            dao.getAttachments(state.noteId).firstOrNull { it.id == state.attachmentId }
+        }
+        val existingUri = existingAttachment?.uri?.let(Uri::parse)
+        val existingFile = existingUri
+            ?.takeIf { it.scheme == "file" }
+            ?.path
+            ?.let(::File)
+        if (existingNote != null && existingFile != null) {
+            existingFile.parentFile?.mkdirs()
+            existingFile.writeBytes(bytes)
+            dao.upsert(
+                existingNote.copy(
+                    title = binaryDisplayName(remoteName),
+                    updatedAt = System.currentTimeMillis(),
+                    syncAsBinary = true,
+                ),
+            )
+            return@withContext BinarySyncState(
+                noteId = existingNote.id,
+                attachmentId = existingAttachment.id,
+                remoteFingerprint = remoteFingerprint,
+                localHash = localHash,
+            )
+        }
+
+        val noteId = dao.insert(
+            NoteEntity(
+                title = binaryDisplayName(remoteName),
+                format = NoteFormat.TEXT.name,
+                syncAsBinary = true,
+            ),
+        )
+        val extension = remoteName.substringAfterLast('.', "")
+        val directory = File(context.filesDir, "attachments").apply { mkdirs() }
+        val file = File(
+            directory,
+            buildString {
+                append(UUID.randomUUID())
+                if (extension.isNotBlank()) append('.').append(extension)
+            },
+        )
+        file.writeBytes(bytes)
+        val attachmentId = dao.insertAttachment(
+            AttachmentEntity(
+                noteId = noteId,
+                uri = Uri.fromFile(file).toString(),
+                name = remoteName,
+                mimeType = MimeTypeMap.getSingleton()
+                    .getMimeTypeFromExtension(extension.lowercase()),
+            ),
+        )
+        recordRemoteFileName(noteId, remoteName)
+        BinarySyncState(
+            noteId = noteId,
+            attachmentId = attachmentId,
+            remoteFingerprint = remoteFingerprint,
+            localHash = localHash,
+        )
+    }
+
+    suspend fun moveBinaryToTrash(noteId: Long) {
+        dao.moveToTrash(noteId)
+    }
+
+    private fun binaryDisplayName(remoteName: String): String =
+        remoteName.substringAfterLast('/').ifBlank { "同步文件" }
+
+    private fun ByteArray.sha256(): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(this)
+            .joinToString("") { "%02x".format(it) }
+
     private fun withEmbeddedData(attachment: AttachmentEntity): AttachmentEntity {
         if (attachment.embeddedData != null) return attachment
         return runCatching {
@@ -395,14 +571,58 @@ class NotesRepository(
     private suspend fun writeMarkdownMirror(noteId: Long) {
         withContext(Dispatchers.IO) {
             val note = dao.getNote(noteId) ?: return@withContext
+            val mappedName = readRemoteFileNames()[note.id]
+            val legacyFile = File(markdownDirectory(), MarkdownNoteCodec.fileName(note.id))
+            if (note.title.isBlank() && mappedName == null && !legacyFile.isFile) {
+                return@withContext
+            }
             val attachments = dao.getAttachments(note.id).map(::withEmbeddedData)
             val folder = note.folderId?.let { id ->
                 dao.getFoldersForBackup().firstOrNull { it.id == id }
             }
             val content = MarkdownNoteCodec.encode(note, attachments, folder)
             val directory = markdownDirectory().apply { mkdirs() }
-            File(directory, markdownFileName(note.id)).writeText(content)
+            val file = File(directory, markdownFileName(note.id))
+            file.parentFile?.mkdirs()
+            file.writeText(content)
         }
+    }
+
+    private suspend fun renameMarkdownMirror(note: NoteEntity) = withContext(Dispatchers.IO) {
+        val directory = markdownDirectory().apply { mkdirs() }
+        val names = readRemoteFileNames()
+        val legacyName = MarkdownNoteCodec.fileName(note.id)
+        val oldName = names[note.id]
+            ?: legacyName.takeIf { File(directory, it).isFile }
+            ?: return@withContext writeMarkdownMirror(note.id)
+        val usedNames = buildSet {
+            addAll(names.filterKeys { it != note.id }.values)
+            addAll(
+                directory.walkTopDown()
+                    .filter(File::isFile)
+                    .map { it.relativeTo(directory).invariantSeparatorsPath }
+                    .filter { it != oldName },
+            )
+        }
+        val newName = MarkdownNoteCodec.fileNameForTitle(
+            title = note.title,
+            noteId = note.id,
+            usedNames = usedNames,
+        )
+        names[note.id] = newName
+        writeRemoteFileNames(names)
+        if (newName != oldName) {
+            val oldFile = File(directory, oldName)
+            val newFile = File(directory, newName)
+            newFile.parentFile?.mkdirs()
+            if (oldFile.isFile) {
+                if (!oldFile.renameTo(newFile)) {
+                    oldFile.copyTo(newFile, overwrite = true)
+                    oldFile.delete()
+                }
+            }
+        }
+        writeMarkdownMirror(note.id)
     }
 
     private suspend fun deleteMarkdownMirror(noteId: Long) {
@@ -418,8 +638,42 @@ class NotesRepository(
     private fun markdownDirectory(): File =
         File(context.filesDir, "markdown-notes")
 
-    private fun markdownFileName(noteId: Long): String =
-        readRemoteFileNames()[noteId] ?: MarkdownNoteCodec.fileName(noteId)
+    private suspend fun markdownFileName(noteId: Long): String {
+        val names = readRemoteFileNames()
+        names[noteId]?.let { return it }
+
+        val directory = markdownDirectory().apply { mkdirs() }
+        val legacyName = MarkdownNoteCodec.fileName(noteId)
+        val note = dao.getNote(noteId)
+        val legacyFile = File(directory, legacyName)
+        if (legacyFile.isFile && note?.title.isNullOrBlank()) {
+            names[noteId] = legacyName
+            writeRemoteFileNames(names)
+            return legacyName
+        }
+
+        val usedNames = names.values.toMutableSet().apply {
+            addAll(
+                directory.walkTopDown()
+                    .filter(File::isFile)
+                    .map { it.relativeTo(directory).invariantSeparatorsPath },
+            )
+            remove(legacyName)
+        }
+        val title = note?.title.orEmpty()
+        val generated = MarkdownNoteCodec.fileNameForTitle(title, noteId, usedNames)
+        if (legacyFile.isFile && generated != legacyName) {
+            val generatedFile = File(directory, generated)
+            generatedFile.parentFile?.mkdirs()
+            if (!legacyFile.renameTo(generatedFile)) {
+                legacyFile.copyTo(generatedFile, overwrite = true)
+                legacyFile.delete()
+            }
+        }
+        names[noteId] = generated
+        writeRemoteFileNames(names)
+        return generated
+    }
 
     private suspend fun recordRemoteFileName(noteId: Long, fileName: String) =
         withContext(Dispatchers.IO) {
@@ -476,8 +730,10 @@ class NotesRepository(
     companion object {
         private const val MAX_IMPORT_CHARS = 2_000_000
         private const val MAX_EMBEDDED_ATTACHMENT_BYTES = 30L * 1024 * 1024
+        private val NOTE_FILE_EXTENSIONS = setOf("md", "markdown", "txt")
         private const val REMOTE_FILE_NAMES = ".remote-file-names"
         private const val SYNC_STATE_FILE = ".sync-state"
+        private const val BINARY_SYNC_STATE_FILE = ".binary-sync-state"
     }
 }
 
@@ -487,6 +743,13 @@ data class MarkdownNoteImport(
 )
 
 data class MarkdownSyncState(
+    val remoteFingerprint: String,
+    val localHash: String,
+)
+
+data class BinarySyncState(
+    val noteId: Long,
+    val attachmentId: Long,
     val remoteFingerprint: String,
     val localHash: String,
 )

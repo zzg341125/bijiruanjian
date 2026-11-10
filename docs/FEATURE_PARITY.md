@@ -25,12 +25,13 @@ account services, or paid backend behavior.
 | Application PIN lock | Yes |
 | Theme, dynamic color, font scale | Yes |
 | Markdown note files | One `note-ID.md` per note |
-| WebDAV online backup and restore | Yes, using Markdown note files |
+| WebDAV online backup and restore | Yes, Obsidian-style three-way sync |
 | Direct Markdown import | Yes |
 | Ruled paper editor | Yes |
 | Fixed home search | Yes |
 | Undo and redo history | Yes |
 | Self-contained HTML export | Yes |
+| Encrypted full backup and merge import | Yes, AES-256-GCM `.qbak` |
 | Incoming text share | Yes |
 | App shortcuts | Yes |
 
@@ -44,7 +45,6 @@ account services, or paid backend behavior.
 
 ## Next stages
 
-- Encrypted attachment bundle backup.
 - Optional user-configured AI provider.
 - Home-screen widget.
 - PDF and DOCX import.

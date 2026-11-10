@@ -28,6 +28,7 @@ data class NoteEntity(
     val updatedAt: Long = System.currentTimeMillis(),
     val deletedAt: Long? = null,
     val reminderAt: Long? = null,
+    val syncAsBinary: Boolean = false,
 )
 
 @Entity(tableName = "folders")

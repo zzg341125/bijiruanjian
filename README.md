@@ -22,9 +22,14 @@
 - 图片可直接嵌入便签正文，并随文档预览和导出
 - 任意文档附件
 - 图片附件可嵌入 Markdown 记事和单文件 HTML
+- 内置 Weave Office 引擎，可直接打开和编辑 docx/xlsx（arm64-v8a）
 - 导出正文、图片和内置图标合并的单文件 HTML
+- 密码加密的完整备份：记事、文件夹、提醒、图片和附件统一导出为 `.qbak`
 - 直接批量导入 `.md` 文件
 - WebDAV 前台每 30 秒自动同步，每篇记事保存为独立的 Markdown 文件
+- 自动创建「曲阳便签」WebDAV 专用目录，支持批量同步几十个 Markdown 文件
+- Obsidian 式三方同步：本地、远端和上次记录对比，支持冲突与删除传播
+- 超过一半的批量删除会被自动拦截，避免 WebDAV 异常导致本地笔记全部丢失
 - 笔记提醒与系统通知
 - 飞机按钮操作面板：复制文字、文字分享、图片分享、发送邮件
 - PIN 应用锁
@@ -66,6 +71,17 @@ app/build/outputs/apk/debug/app-debug.apk
 - PIN 以带随机盐的 PBKDF2 哈希保存，不保存明文。
 - 附件复制到应用私有目录，不请求宽泛存储权限。
 
+### 坚果云 WebDAV
+
+在坚果云“账户信息 → 安全选项 → 第三方应用管理”中创建应用并获取专用应用密码。
+应用内填写坚果云账号和应用密码，地址使用 `https://dav.jianguoyun.com/dav/`。
+曲阳便签会自动创建并同步到该地址下的「曲阳便签」目录，不会扫描或覆盖网盘根目录
+中的其他文件。
+
+如果已有 Markdown 目录，也可以直接填写具体目录，例如
+`https://dav.jianguoyun.com/dav/biji/`。此时应用会原样读取和写入 `biji` 目录，
+不会再额外创建子目录。
+
 ## 发布签名
 
 仓库不包含发布证书。请自行生成并安全保管 keystore，再通过 `KEYSTORE_FILE`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD` 环境变量配置签名。正式发布前还应执行：
@@ -81,8 +97,8 @@ app/build/outputs/apk/debug/app-debug.apk
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.5.1
-git push origin v0.5.1
+git tag v0.9.1
+git push origin v0.9.1
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。

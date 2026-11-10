@@ -1,5 +1,6 @@
 package io.github.latticenotes.ui
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -44,6 +45,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import io.github.latticenotes.BuildConfig
+import io.github.latticenotes.backup.EncryptedBackupCodec
 import io.github.latticenotes.data.AppSettings
 import io.github.latticenotes.data.CredentialVault
 import io.github.latticenotes.data.NoteFormat
@@ -52,8 +55,12 @@ import io.github.latticenotes.data.OnlineSyncManager
 import io.github.latticenotes.data.SettingsRepository
 import io.github.latticenotes.data.WebDavClient
 import io.github.latticenotes.data.WebDavConfig
+import io.github.latticenotes.reminder.ReminderScheduler
 import io.github.latticenotes.util.PinHasher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +78,27 @@ fun SettingsScreen(
     var disablePinDialog by remember { mutableStateOf(false) }
     var webDavDialog by remember { mutableStateOf(false) }
     var webDavRestoreDialog by remember { mutableStateOf(false) }
+    var exportBackupUri by remember { mutableStateOf<Uri?>(null) }
+    var importBackupUri by remember { mutableStateOf<Uri?>(null) }
+    var exportPasswordDialog by remember { mutableStateOf(false) }
+    var importPasswordDialog by remember { mutableStateOf(false) }
+
+    val exportBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        if (uri != null) {
+            exportBackupUri = uri
+            exportPasswordDialog = true
+        }
+    }
+    val importBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            importBackupUri = uri
+            importPasswordDialog = true
+        }
+    }
 
     val markdownLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
@@ -205,6 +233,46 @@ fun SettingsScreen(
                     },
                 )
             }
+            item {
+                Text(
+                    "完整备份",
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            item {
+                ListItem(
+                    leadingContent = { Icon(Icons.Outlined.Add, null) },
+                    headlineContent = { Text("导出加密完整备份") },
+                    supportingContent = {
+                        Text("包含记事、文件夹、提醒、图片和附件")
+                    },
+                    modifier = Modifier.clickableItem {
+                        exportBackupLauncher.launch(
+                            "quyang-backup-${LocalDate.now()}.qbak",
+                        )
+                    },
+                )
+            }
+            item {
+                ListItem(
+                    leadingContent = { Icon(Icons.Outlined.Refresh, null) },
+                    headlineContent = { Text("导入加密完整备份") },
+                    supportingContent = {
+                        Text("按更新时间合并，较新的本地记事保持不变")
+                    },
+                    modifier = Modifier.clickableItem {
+                        importBackupLauncher.launch(
+                            arrayOf(
+                                "application/octet-stream",
+                                "application/json",
+                                "text/plain",
+                            ),
+                        )
+                    },
+                )
+            }
             item { HorizontalDivider(Modifier.padding(vertical = 10.dp)) }
             item {
                 ListItem(
@@ -248,7 +316,7 @@ fun SettingsScreen(
                                 effectiveWebDavUrl.isNotBlank() &&
                                 effectiveWebDavUrl != settings.webDavUrl
                             ) {
-                                Text("Markdown 文件夹：$effectiveWebDavUrl")
+                                Text("同步目录：$effectiveWebDavUrl")
                             }
                         }
                     },
@@ -259,7 +327,7 @@ fun SettingsScreen(
                 ListItem(
                     headlineContent = { Text("自动同步（前台每 30 秒）") },
                     supportingContent = {
-                        Text("启动时立即同步；之后只处理有变化的 Markdown 文件")
+                        Text("本地、远端与上次记录三方比较；支持批量文件和删除保护")
                     },
                     trailingContent = {
                         Switch(
@@ -291,7 +359,7 @@ fun SettingsScreen(
                 ListItem(
                     leadingContent = { Icon(Icons.Outlined.Refresh, null) },
                     headlineContent = { Text("立即同步 Markdown 记事") },
-                    supportingContent = { Text("每篇记事保存为独立的 note-ID.md 文件") },
+                    supportingContent = { Text("仅上传变化文件，每篇记事保存为独立 Markdown") },
                     modifier = Modifier.clickableItem {
                         scope.launch {
                             snackbar.showSnackbar(
@@ -318,7 +386,7 @@ fun SettingsScreen(
             item {
                 ListItem(
                     leadingContent = { Icon(Icons.Outlined.Info, null) },
-                    headlineContent = { Text("曲阳便签 0.5.1") },
+                    headlineContent = { Text("曲阳便签 ${BuildConfig.VERSION_NAME}") },
                     supportingContent = { Text("MIT License · 本地优先 · 无广告") },
                 )
             }
@@ -401,7 +469,7 @@ fun SettingsScreen(
                                     credentialVault,
                                     force = true,
                                 ) ?: error("WebDAV 自动同步未启用")
-                            }.onSuccess { snackbar.showSnackbar("WebDAV Markdown 同步完成") }
+                            }.onSuccess { snackbar.showSnackbar(it) }
                                 .onFailure { snackbar.showSnackbar("恢复失败：${it.message}") }
                         }
                     },
@@ -412,7 +480,171 @@ fun SettingsScreen(
             },
         )
     }
+    if (exportPasswordDialog) {
+        BackupPasswordDialog(
+            title = "设置备份密码",
+            supportingText = "密码至少 8 个字符。忘记密码后无法恢复备份。",
+            confirmLabel = "加密并导出",
+            requireConfirmation = true,
+            onDismiss = {
+                exportPasswordDialog = false
+                exportBackupUri = null
+            },
+            onConfirm = { password ->
+                val uri = exportBackupUri
+                exportPasswordDialog = false
+                exportBackupUri = null
+                if (uri == null) {
+                    scope.launch { snackbar.showSnackbar("无法创建备份文件") }
+                } else {
+                    scope.launch {
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                val payload = repository.getAllForBackup()
+                                val encoded = EncryptedBackupCodec.encode(payload, password)
+                                require(encoded.size <= MAX_BACKUP_BYTES) { "备份文件过大" }
+                                context.contentResolver.openOutputStream(uri)?.use { output ->
+                                    output.write(encoded)
+                                } ?: error("无法写入所选文件")
+                            }
+                        }.onSuccess {
+                            snackbar.showSnackbar("加密完整备份已导出")
+                        }.onFailure {
+                            snackbar.showSnackbar("导出失败：${it.message}")
+                        }
+                    }
+                }
+            },
+        )
+    }
+    if (importPasswordDialog) {
+        BackupPasswordDialog(
+            title = "输入备份密码",
+            supportingText = "将读取加密备份并合并到当前记事，不会删除现有内容。",
+            confirmLabel = "解密并导入",
+            requireConfirmation = false,
+            onDismiss = {
+                importPasswordDialog = false
+                importBackupUri = null
+            },
+            onConfirm = { password ->
+                val uri = importBackupUri
+                importPasswordDialog = false
+                importBackupUri = null
+                if (uri == null) {
+                    scope.launch { snackbar.showSnackbar("无法读取备份文件") }
+                } else {
+                    scope.launch {
+                        runCatching {
+                            val payload = withContext(Dispatchers.IO) {
+                                val encoded = context.contentResolver.openInputStream(uri)
+                                    ?.use { input -> readLimitedBytes(input, MAX_BACKUP_BYTES) }
+                                    ?: error("无法读取所选文件")
+                                EncryptedBackupCodec.decode(encoded, password)
+                            }
+                            repository.mergeBackup(payload)
+                            val now = System.currentTimeMillis()
+                            payload.notes.forEach { imported ->
+                                val current = repository.getNote(imported.id) ?: return@forEach
+                                if (
+                                    current.updatedAt == imported.updatedAt &&
+                                    current.reminderAt != null &&
+                                    current.reminderAt > now &&
+                                    !current.trashed
+                                ) {
+                                    ReminderScheduler.schedule(
+                                        context,
+                                        current.id,
+                                        current.title,
+                                        current.reminderAt,
+                                    )
+                                }
+                            }
+                        }.onSuccess {
+                            snackbar.showSnackbar("完整备份已合并")
+                        }.onFailure {
+                            snackbar.showSnackbar("导入失败：${it.message}")
+                        }
+                    }
+                }
+            },
+        )
+    }
 }
+
+@Composable
+private fun BackupPasswordDialog(
+    title: String,
+    supportingText: String,
+    confirmLabel: String,
+    requireConfirmation: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var password by remember { mutableStateOf("") }
+    var confirmation by remember { mutableStateOf("") }
+    val valid = password.length >= 8 &&
+        (!requireConfirmation || password == confirmation)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(supportingText)
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it.take(128) },
+                    label = { Text(if (requireConfirmation) "密码" else "备份密码") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                )
+                if (requireConfirmation) {
+                    OutlinedTextField(
+                        value = confirmation,
+                        onValueChange = { confirmation = it.take(128) },
+                        label = { Text("再次输入密码") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        isError = confirmation.isNotEmpty() && confirmation != password,
+                        supportingText = {
+                            if (confirmation.isNotEmpty() && confirmation != password) {
+                                Text("两次输入的密码不一致")
+                            }
+                        },
+                        singleLine = true,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = valid,
+                onClick = { onConfirm(password) },
+            ) { Text(confirmLabel) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
+}
+
+private fun readLimitedBytes(
+    input: java.io.InputStream,
+    maxBytes: Int,
+): ByteArray {
+    val output = java.io.ByteArrayOutputStream()
+    val buffer = ByteArray(8192)
+    var total = 0
+    while (true) {
+        val count = input.read(buffer)
+        if (count < 0) break
+        total += count
+        require(total <= maxBytes) { "备份文件过大" }
+        output.write(buffer, 0, count)
+    }
+    return output.toByteArray()
+}
+
+private const val MAX_BACKUP_BYTES = 128 * 1024 * 1024
 
 @Composable
 private fun WebDavConfigDialog(
@@ -434,13 +666,13 @@ private fun WebDavConfigDialog(
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
-                    label = { Text("WebDAV Markdown 文件夹 URL") },
+                    label = { Text("WebDAV 根地址") },
                     placeholder = {
                         Text("https://dav.jianguoyun.com/dav/biji")
                     },
                     supportingText = {
                         Text(
-                            "目录中每篇记事会保存为独立的 note-ID.md 文件",
+                            "填写 /dav/ 根地址会创建「曲阳便签」；填写 /dav/biji/ 等具体目录时直接同步该目录",
                         )
                     },
                     singleLine = true,

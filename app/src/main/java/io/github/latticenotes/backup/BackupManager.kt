@@ -84,6 +84,7 @@ object BackupManager {
                 updatedAt = item.optLong("updatedAt", System.currentTimeMillis()),
                 deletedAt = item.optLongOrNull("deletedAt"),
                 reminderAt = item.optLongOrNull("reminderAt"),
+                syncAsBinary = item.optBoolean("syncAsBinary"),
             )
         }
         val noteIds = notes.map { it.id }.toSet()
@@ -118,6 +119,7 @@ object BackupManager {
         put("updatedAt", updatedAt)
         if (deletedAt == null) put("deletedAt", JSONObject.NULL) else put("deletedAt", deletedAt)
         if (reminderAt == null) put("reminderAt", JSONObject.NULL) else put("reminderAt", reminderAt)
+        put("syncAsBinary", syncAsBinary)
     }
 
     private fun JSONArray?.orEmptyObjects(): List<JSONObject> {

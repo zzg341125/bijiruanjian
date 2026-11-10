@@ -21,6 +21,7 @@ class BackupManagerTest {
                     folderId = 3,
                     tags = "work,release",
                     starred = true,
+                    syncAsBinary = true,
                 ),
             ),
             folders = listOf(FolderEntity(id = 3, name = "Work")),
@@ -42,5 +43,6 @@ class BackupManagerTest {
         assertEquals("image.png", decoded.attachments.single().name)
         assertEquals("aGVsbG8=", decoded.attachments.single().embeddedData)
         assertTrue(decoded.notes.single().starred)
+        assertTrue(decoded.notes.single().syncAsBinary)
     }
 }

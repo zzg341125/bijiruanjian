@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -13,6 +14,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
+import android.webkit.MimeTypeMap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -94,6 +96,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.core.view.WindowCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
@@ -107,6 +110,7 @@ import io.github.latticenotes.reminder.ReminderScheduler
 import io.github.latticenotes.share.ShareImage
 import io.github.latticenotes.util.AttachmentReferences
 import io.github.latticenotes.util.isImageAttachment
+import io.github.frozencaviar.weaveoffice.WeaveOfficeActivity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -299,6 +303,7 @@ fun EditorScreen(
     val imageAttachments = attachments.filter(AttachmentEntity::isImageAttachment)
     val fileAttachments = attachments.filterNot(AttachmentEntity::isImageAttachment)
     val editorBody = AttachmentReferences.plainText(body)
+
 
     Scaffold(
         modifier = Modifier
@@ -1240,20 +1245,61 @@ private fun editorTimestamp(value: Long): String {
 }
 
 private fun openAttachment(context: Context, attachment: AttachmentEntity) {
-    runCatching {
+    try {
         val path = Uri.parse(attachment.uri).path ?: error("附件路径无效")
         val uri = FileProvider.getUriForFile(
             context,
             "${context.packageName}.files",
             File(path),
         )
-        context.startActivity(
-            Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, attachment.mimeType ?: "*/*")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            },
-        )
-    }.onFailure {
+        val extension = attachment.name.substringAfterLast('.', "").lowercase()
+        val mimeType = attachment.mimeType
+            ?.takeIf { it.isNotBlank() }
+            ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+            ?: "application/octet-stream"
+        if (
+            (extension == "docx" || extension == "xlsx") &&
+            Build.SUPPORTED_ABIS.contains("arm64-v8a")
+        ) {
+            try {
+                File(context.filesDir, "update-check-off").writeText("1")
+                context.startActivity(
+                    Intent(context, WeaveOfficeActivity::class.java).apply {
+                        action = Intent.ACTION_VIEW
+                        setDataAndType(uri, mimeType)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                    },
+                )
+                return
+            } catch (_: Throwable) {
+                // Fall through to an installed Office app if the embedded engine cannot start.
+            }
+        }
+        val mimeCandidates = listOf(mimeType, "application/octet-stream", "*/*").distinct()
+        for (action in listOf(Intent.ACTION_VIEW, Intent.ACTION_EDIT)) {
+            for (candidateType in mimeCandidates) {
+                val intent = Intent(action).apply {
+                    setDataAndType(uri, candidateType)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                }
+                try {
+                    context.startActivity(intent)
+                    return
+                } catch (_: ActivityNotFoundException) {
+                    // Try the next MIME or action.
+                }
+            }
+        }
+        throw ActivityNotFoundException()
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(
+            context,
+            "没有安装可打开 ${attachment.name} 的应用。请安装 WPS Office 或 Microsoft 365。",
+            Toast.LENGTH_LONG,
+        ).show()
+    } catch (it: Throwable) {
         Toast.makeText(context, "无法打开附件：${it.message}", Toast.LENGTH_SHORT).show()
     }
 }
