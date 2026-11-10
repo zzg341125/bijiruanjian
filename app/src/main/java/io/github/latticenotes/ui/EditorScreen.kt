@@ -17,10 +17,12 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +32,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -151,6 +154,8 @@ fun EditorScreen(
     var deleteConfirm by remember { mutableStateOf(false) }
     var attachmentToDelete by remember { mutableStateOf<AttachmentEntity?>(null) }
     val history = remember(noteId) { EditorHistory() }
+    val documentEditor = remember(noteId) { DocumentEditorController() }
+    val documentScroll = remember(noteId) { ScrollState(0) }
 
     val activity = context.findActivity()
     DisposableEffect(activity) {
@@ -245,23 +250,14 @@ fun EditorScreen(
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
         scope.launch {
-            var nextBody = body
             var insertedImages = 0
             uris.forEach { uri ->
                 val attachment = repository.addAttachment(noteId, uri) ?: return@forEach
                 if (attachment.isImageAttachment()) {
-                    nextBody = AttachmentReferences.appendToBody(
-                        nextBody,
-                        AttachmentReferences.imageMarkdown(
-                            attachment.id,
-                            attachment.name,
-                        ),
-                    )
                     insertedImages++
                 }
             }
-            if (nextBody != body) {
-                setBodyWithHistory(nextBody)
+            if (insertedImages > 0) {
                 Toast.makeText(
                     context,
                     "已插入 $insertedImages 张图片到便签正文",
@@ -300,10 +296,9 @@ fun EditorScreen(
     ) {}
     val currentFolder = folders.firstOrNull { it.id == currentNote?.folderId }
     val characterCount = AttachmentReferences.plainText(body).count { !it.isWhitespace() }
-    val referencedImageIds = AttachmentReferences.referencedImageIds(body)
-    val attachmentsOutsideDocument = attachments.filter { attachment ->
-        !attachment.isImageAttachment() || attachment.id !in referencedImageIds
-    }
+    val imageAttachments = attachments.filter(AttachmentEntity::isImageAttachment)
+    val fileAttachments = attachments.filterNot(AttachmentEntity::isImageAttachment)
+    val editorBody = AttachmentReferences.plainText(body)
 
     Scaffold(
         modifier = Modifier
@@ -571,19 +566,9 @@ fun EditorScreen(
             if (!preview) {
                 EditorFormatToolbar(
                     modifier = Modifier.navigationBarsPadding(),
-                    onInsert = { prefix, suffix, multiline ->
+                    onFormat = { action ->
                         format = NoteFormat.MARKDOWN
-                        setBodyWithHistory(
-                            if (multiline) {
-                                if (body.isBlank() || body.endsWith('\n')) {
-                                    "$body$prefix"
-                                } else {
-                                    "$body\n$prefix"
-                                }
-                            } else {
-                                "$body$prefix${suffix.orEmpty()}"
-                            },
-                        )
+                        documentEditor.apply(action)
                     },
                 )
             }
@@ -601,6 +586,7 @@ fun EditorScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .verticalScroll(documentScroll)
                     .padding(start = 54.dp, end = 18.dp),
             ) {
                 Row(
@@ -759,9 +745,9 @@ fun EditorScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
+                            .heightIn(min = 280.dp),
                     ) {
-                        if (body.isBlank()) {
+                        if (editorBody.isBlank()) {
                             Text(
                                 text = "开始记录…",
                                 color = EditorMutedInk.copy(alpha = 0.52f),
@@ -770,13 +756,18 @@ fun EditorScreen(
                             )
                         }
                         InlineDocumentEditor(
-                            value = body,
+                            value = editorBody,
                             onValueChange = ::setBodyWithHistory,
-                            attachments = attachments,
+                            controller = documentEditor,
                             textColor = EditorInk,
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
+                    EmbeddedDocumentImages(
+                        attachments = imageAttachments,
+                        onOpen = { openAttachment(context, it) },
+                        onDelete = { attachmentToDelete = it },
+                    )
                 } else {
                     Text(
                         text = title.ifBlank { "无标题" },
@@ -791,32 +782,21 @@ fun EditorScreen(
                         overflow = TextOverflow.Ellipsis,
                     )
                     MarkdownPreview(
-                        markdown = body,
-                        attachments = attachments,
+                        markdown = editorBody,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
+                            .fillMaxWidth(),
+                    )
+                    EmbeddedDocumentImages(
+                        attachments = imageAttachments,
+                        onOpen = { openAttachment(context, it) },
+                        onDelete = { attachmentToDelete = it },
                     )
                 }
 
-                if (attachmentsOutsideDocument.isNotEmpty()) {
+                if (fileAttachments.isNotEmpty()) {
                     AttachmentStrip(
-                        attachments = attachmentsOutsideDocument,
-                        onOpen = { attachment ->
-                            runCatching {
-                                val uri = FileProvider.getUriForFile(
-                                    context,
-                                    "${context.packageName}.files",
-                                    File(Uri.parse(attachment.uri).path!!),
-                                )
-                                context.startActivity(
-                                    Intent(Intent.ACTION_VIEW).apply {
-                                        setDataAndType(uri, attachment.mimeType ?: "*/*")
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    },
-                                )
-                            }
-                        },
+                        attachments = fileAttachments,
+                        onOpen = { openAttachment(context, it) },
                         onDelete = { attachmentToDelete = it },
                     )
                 }
@@ -1091,7 +1071,7 @@ private fun noteShareText(title: String, body: String): String =
 @Composable
 private fun EditorFormatToolbar(
     modifier: Modifier = Modifier,
-    onInsert: (prefix: String, suffix: String?, multiline: Boolean) -> Unit,
+    onFormat: (DocumentFormatAction) -> Unit,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -1109,7 +1089,7 @@ private fun EditorFormatToolbar(
             EditorFormatButton(
                 label = "标题",
                 modifier = Modifier.weight(1f),
-                onClick = { onInsert("# ", null, true) },
+                onClick = { onFormat(DocumentFormatAction.HEADING) },
             ) {
                 Text(
                     text = "H",
@@ -1123,7 +1103,7 @@ private fun EditorFormatToolbar(
             EditorFormatButton(
                 label = "居中",
                 modifier = Modifier.weight(1f),
-                onClick = { onInsert("<center>居中文字</center>", null, true) },
+                onClick = { onFormat(DocumentFormatAction.CENTER) },
             ) {
                 CenterLinesGlyph()
             }
@@ -1131,7 +1111,7 @@ private fun EditorFormatToolbar(
             EditorFormatButton(
                 label = "列表",
                 modifier = Modifier.weight(1f),
-                onClick = { onInsert("- ", null, true) },
+                onClick = { onFormat(DocumentFormatAction.BULLET) },
             ) {
                 ListGlyph()
             }
@@ -1139,7 +1119,7 @@ private fun EditorFormatToolbar(
             EditorFormatButton(
                 label = "粗体",
                 modifier = Modifier.weight(1f),
-                onClick = { onInsert("**", "**", false) },
+                onClick = { onFormat(DocumentFormatAction.BOLD) },
             ) {
                 Text(
                     text = "B",
@@ -1153,7 +1133,7 @@ private fun EditorFormatToolbar(
             EditorFormatButton(
                 label = "引用",
                 modifier = Modifier.weight(1f),
-                onClick = { onInsert("> ", null, true) },
+                onClick = { onFormat(DocumentFormatAction.QUOTE) },
             ) {
                 Text(
                     text = "❝",
@@ -1167,7 +1147,7 @@ private fun EditorFormatToolbar(
             EditorFormatButton(
                 label = "待办事项",
                 modifier = Modifier.weight(1.25f),
-                onClick = { onInsert("- [ ] ", null, true) },
+                onClick = { onFormat(DocumentFormatAction.TODO) },
             ) {
                 Text(
                     text = "☑",
@@ -1257,6 +1237,74 @@ private fun editorTimestamp(value: Long): String {
         dateTime.format(editorDateFormatter)
     }
     return "$day ${dateTime.format(editorClockFormatter)}"
+}
+
+private fun openAttachment(context: Context, attachment: AttachmentEntity) {
+    runCatching {
+        val path = Uri.parse(attachment.uri).path ?: error("附件路径无效")
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.files",
+            File(path),
+        )
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, attachment.mimeType ?: "*/*")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            },
+        )
+    }.onFailure {
+        Toast.makeText(context, "无法打开附件：${it.message}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+@Composable
+private fun EmbeddedDocumentImages(
+    attachments: List<AttachmentEntity>,
+    onOpen: (AttachmentEntity) -> Unit,
+    onDelete: (AttachmentEntity) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        attachments.forEach { attachment ->
+            AsyncImage(
+                model = File(Uri.parse(attachment.uri).path.orEmpty()),
+                contentDescription = attachment.name,
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .heightIn(min = 120.dp, max = 720.dp)
+                    .padding(vertical = 8.dp),
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(0.9f),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = attachment.name,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = EditorMutedInk,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                TextButton(onClick = { onOpen(attachment) }) { Text("打开") }
+                IconButton(
+                    onClick = { onDelete(attachment) },
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        Icons.Outlined.Close,
+                        contentDescription = "删除图片",
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+        }
+    }
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {

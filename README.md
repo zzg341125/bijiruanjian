@@ -21,16 +21,16 @@
 - 标题与正文搜索，本地知识检索
 - 图片可直接嵌入便签正文，并随文档预览和导出
 - 任意文档附件
-- 图片附件可嵌入 WebDAV/JSON 备份
+- 图片附件可嵌入 Markdown 记事和单文件 HTML
 - 导出正文、图片和内置图标合并的单文件 HTML
 - 直接批量导入 `.md` 文件
-- WebDAV 在线备份、恢复与启动自动同步
+- WebDAV 前台每 30 秒自动同步，每篇记事保存为独立的 Markdown 文件
 - 笔记提醒与系统通知
 - 飞机按钮操作面板：复制文字、文字分享、图片分享、发送邮件
 - PIN 应用锁
 - 浅色/深色/跟随系统主题
 - 暖棕/米黄主题、字号缩放
-- JSON 备份与恢复
+- Markdown 文件导入与恢复
 - 从其他应用接收纯文本分享
 - 主屏幕快捷方式：新建便签、搜索
 
@@ -81,8 +81,8 @@ app/build/outputs/apk/debug/app-debug.apk
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.4.0
-git push origin v0.4.0
+git tag v0.5.0
+git push origin v0.5.0
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。
@@ -100,7 +100,7 @@ Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、�
 
 ## 当前边界
 
-应用不依赖云账号、付费服务或远程 AI。知识检索在设备本地执行，在线备份使用用户自己的 WebDAV 服务器。附件文件内容暂不包含在 JSON 在线备份中，只同步附件索引。详见 [功能对照](docs/FEATURE_PARITY.md)。
+应用不依赖云账号、付费服务或远程 AI。知识检索在设备本地执行，在线备份使用用户自己的 WebDAV 服务器。每篇记事以独立 Markdown 文件保存，同步使用 ETag 和内容哈希避免重复下载，图片会以数据 URI 嵌入对应记事。详见 [功能对照](docs/FEATURE_PARITY.md)。
 
 ## 许可证
 

@@ -104,6 +104,7 @@ object SingleFileExporter {
                 .body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 19px; line-height: 32px; }
                 figure { margin: 32px 0; }
                 img { display:block; max-width:100%; height:auto; border-radius:8px; box-shadow:0 4px 18px rgba(54,42,30,.22); }
+                figure img { width:88%; margin-left:auto; margin-right:auto; }
                 figcaption, .missing { color:#796e60; font-size:14px; }
                 .file a { color:#9b592d; }
                 footer { margin-top:56px; color:#8a7b67; font-size:13px; }

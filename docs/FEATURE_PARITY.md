@@ -24,8 +24,8 @@ account services, or paid backend behavior.
 | Share as long image | Yes |
 | Application PIN lock | Yes |
 | Theme, dynamic color, font scale | Yes |
-| JSON backup and restore | Yes |
-| WebDAV online backup and restore | Yes |
+| Markdown note files | One `note-ID.md` per note |
+| WebDAV online backup and restore | Yes, using Markdown note files |
 | Direct Markdown import | Yes |
 | Ruled paper editor | Yes |
 | Fixed home search | Yes |

@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import io.github.latticenotes.BuildConfig
 import io.github.latticenotes.util.PinHasher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -55,8 +56,12 @@ class SettingsRepository(private val context: Context) {
                 pinHash = preferences[Keys.pinHash] ?: "",
                 pinSalt = preferences[Keys.pinSalt] ?: "",
                 defaultFormat = preferences[Keys.defaultFormat] ?: NoteFormat.TEXT.name,
-                webDavUrl = preferences[Keys.webDavUrl] ?: "",
-                webDavUsername = preferences[Keys.webDavUsername] ?: "",
+                webDavUrl = BuildConfig.DEFAULT_WEBDAV_URL.ifBlank {
+                    preferences[Keys.webDavUrl].orEmpty()
+                },
+                webDavUsername = BuildConfig.DEFAULT_WEBDAV_USERNAME.ifBlank {
+                    preferences[Keys.webDavUsername].orEmpty()
+                },
                 webDavAutoSync = preferences[Keys.webDavAutoSync] ?: true,
             )
         }

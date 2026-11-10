@@ -32,7 +32,7 @@ Result:
 - Fixed home search box.
 - Editor undo and redo.
 - Direct multi-file Markdown import.
-- WebDAV configuration, connection test, upload, restore, and launch sync.
+- WebDAV configuration, connection test, Markdown upload, restore, and foreground sync.
 - Delete confirmation for notes, folders, and attachments.
 - Single-file HTML export with inline icon and attachments.
 - Force-stop and relaunch: note persisted.

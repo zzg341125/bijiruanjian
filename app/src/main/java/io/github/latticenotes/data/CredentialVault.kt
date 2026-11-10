@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import io.github.latticenotes.BuildConfig
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -42,8 +43,12 @@ class CredentialVault(context: Context) {
         }.getOrDefault("")
     }
 
+    fun loadWebDavPasswordOrDefault(): String =
+        loadWebDavPassword().ifBlank { BuildConfig.DEFAULT_WEBDAV_PASSWORD }
+
     fun hasWebDavPassword(): Boolean =
-        !preferences.getString("webdav_ciphertext", null).isNullOrBlank()
+        !preferences.getString("webdav_ciphertext", null).isNullOrBlank() ||
+            BuildConfig.DEFAULT_WEBDAV_PASSWORD.isNotBlank()
 
     fun clearWebDavPassword() {
         preferences.edit().clear().apply()

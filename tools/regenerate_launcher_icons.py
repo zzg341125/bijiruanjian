@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RES = ROOT / "app" / "src" / "main" / "res"
 SOURCE = RES / "drawable-nodpi" / "ic_launcher_foreground.png"
 PREVIEW = ROOT / "docs" / "quyang-icon-preview.png"
-BACKGROUND = (232, 211, 168)
+BACKGROUND = (246, 222, 174)
 LEGACY_SIZES = {
     "mdpi": 48,
     "hdpi": 72,
@@ -33,13 +33,29 @@ def clean_transparent_rgb(
     return image
 
 
+def make_full_bleed(image: Image.Image) -> Image.Image:
+    image = image.convert("RGBA")
+    pixels = image.load()
+    edge_band = max(4, image.width // 24)
+    for y in range(image.height):
+        for x in range(image.width):
+            if min(x, y, image.width - 1 - x, image.height - 1 - y) > edge_band:
+                continue
+            red, green, blue, _ = pixels[x, y]
+            if red > 225 and green > 215 and blue > 185:
+                pixels[x, y] = (*BACKGROUND, 255)
+    canvas = Image.new("RGBA", image.size, (*BACKGROUND, 255))
+    canvas.alpha_composite(image)
+    return canvas.convert("RGBA")
+
+
 master = clean_transparent_rgb(Image.open(SOURCE))
 master.save(SOURCE, format="PNG", optimize=True)
 master.save(PREVIEW, format="PNG", optimize=True)
 
 for density, size in LEGACY_SIZES.items():
     resized = master.resize((size, size), Image.Resampling.LANCZOS)
-    icon = clean_transparent_rgb(resized, alpha_cutoff=8)
+    icon = make_full_bleed(resized)
     output_dir = RES / f"mipmap-{density}"
     icon.save(output_dir / "ic_launcher.png", format="PNG", optimize=True)
     icon.save(output_dir / "ic_launcher_round.png", format="PNG", optimize=True)

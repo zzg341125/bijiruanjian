@@ -41,7 +41,6 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.List
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -87,7 +86,6 @@ import io.github.latticenotes.data.NoteFormat
 import io.github.latticenotes.data.NotesRepository
 import io.github.latticenotes.util.AttachmentReferences
 import io.github.latticenotes.util.formatTimestamp
-import io.github.latticenotes.util.notePreview
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
@@ -436,7 +434,6 @@ fun HomeScreen(
                         items(filtered, key = { it.id }) { note ->
                             NoteCard(
                                 note = note,
-                                folder = folders.firstOrNull { it.id == note.folderId },
                                 trashed = view == NoteView.TRASH,
                                 onClick = {
                                     if (view == NoteView.TRASH) {
@@ -742,7 +739,6 @@ private fun categoryTimestamp(value: Long): String =
 @Composable
 private fun NoteCard(
     note: NoteEntity,
-    folder: FolderEntity?,
     trashed: Boolean,
     onClick: () -> Unit,
     onTogglePin: () -> Unit,
@@ -770,7 +766,7 @@ private fun NoteCard(
     ) {
         Column(
             Modifier
-                .padding(16.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
                 .drawBehind {
                     val step = 32.dp.toPx()
                     var y = step
@@ -785,6 +781,12 @@ private fun NoteCard(
                     }
                 },
         ) {
+            Text(
+                text = formatTimestamp(note.updatedAt),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF676B66),
+            )
+            Spacer(Modifier.height(3.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = note.title.ifBlank { "无标题" },
@@ -804,7 +806,10 @@ private fun NoteCard(
                     Spacer(Modifier.width(8.dp))
                 }
                 Box {
-                    IconButton(onClick = { menuOpen = true }) {
+                    IconButton(
+                        onClick = { menuOpen = true },
+                        modifier = Modifier.size(36.dp),
+                    ) {
                         Icon(Icons.Outlined.MoreVert, "更多操作", Modifier.size(20.dp))
                     }
                     DropdownMenu(
@@ -893,41 +898,6 @@ private fun NoteCard(
                         }
                     }
                 }
-            }
-            val preview = notePreview(note.body)
-            if (preview.isNotBlank()) {
-                Text(
-                    text = preview,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF50554F),
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (folder != null) {
-                    AssistChip(
-                        onClick = {},
-                        label = { Text(folder.name) },
-                    )
-                    Spacer(Modifier.width(8.dp))
-                }
-                note.tags.split(',').map(String::trim).filter(String::isNotBlank).take(2)
-                    .forEach { tag ->
-                        Text(
-                            text = "#$tag",
-                            modifier = Modifier.padding(end = 6.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF305C4A),
-                        )
-                    }
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = formatTimestamp(note.updatedAt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF676B66),
-                )
             }
         }
     }

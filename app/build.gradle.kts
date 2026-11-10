@@ -5,6 +5,9 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+fun buildConfigString(value: String): String =
+    "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
 android {
     namespace = "io.github.latticenotes"
     compileSdk = 34
@@ -15,7 +18,10 @@ android {
         ?: 1
     val releaseVersionName = providers.gradleProperty("versionName")
         .orNull
-        ?: "0.4.0"
+        ?: "0.5.0"
+    val personalWebDavUrl = providers.gradleProperty("personalWebDavUrl").orNull.orEmpty()
+    val personalWebDavUsername = providers.gradleProperty("personalWebDavUsername").orNull.orEmpty()
+    val personalWebDavPassword = providers.gradleProperty("personalWebDavPassword").orNull.orEmpty()
 
     defaultConfig {
         applicationId = "io.github.latticenotes"
@@ -26,6 +32,17 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+        buildConfigField("String", "DEFAULT_WEBDAV_URL", buildConfigString(personalWebDavUrl))
+        buildConfigField(
+            "String",
+            "DEFAULT_WEBDAV_USERNAME",
+            buildConfigString(personalWebDavUsername),
+        )
+        buildConfigField(
+            "String",
+            "DEFAULT_WEBDAV_PASSWORD",
+            buildConfigString(personalWebDavPassword),
+        )
     }
 
     signingConfigs {
@@ -101,6 +118,7 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

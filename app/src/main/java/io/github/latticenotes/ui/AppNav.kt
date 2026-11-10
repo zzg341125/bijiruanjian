@@ -1,6 +1,6 @@
 package io.github.latticenotes.ui
 
-import android.widget.Toast
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -13,13 +13,17 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import io.github.latticenotes.data.AppSettings
 import io.github.latticenotes.data.CredentialVault
 import io.github.latticenotes.data.NoteFormat
 import io.github.latticenotes.data.NotesRepository
 import io.github.latticenotes.data.OnlineSyncManager
 import io.github.latticenotes.data.SettingsRepository
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class LaunchRequest(
@@ -39,15 +43,21 @@ fun AppNav(
 ) {
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var startSearch by remember { mutableStateOf(launchRequest?.destination == "search") }
 
-    LaunchedEffect(settings.webDavUrl, settings.webDavAutoSync) {
-        OnlineSyncManager.syncOnLaunch(
-            repository = repository,
-            settings = settings,
-            credentials = credentialVault,
-        )?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+    LaunchedEffect(settings.webDavUrl, settings.webDavAutoSync, lifecycleOwner) {
+        if (!settings.webDavAutoSync || settings.webDavUrl.isBlank()) return@LaunchedEffect
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (isActive) {
+                OnlineSyncManager.sync(
+                    repository = repository,
+                    settings = settings,
+                    credentials = credentialVault,
+                )?.let { Log.d("WebDavSync", it) }
+                delay(OnlineSyncManager.FOREGROUND_SYNC_INTERVAL_MILLIS)
+            }
+        }
     }
 
     LaunchedEffect(launchRequest?.id) {
