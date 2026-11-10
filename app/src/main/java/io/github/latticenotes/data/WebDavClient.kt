@@ -147,7 +147,7 @@ class WebDavClient(private val config: WebDavConfig) {
     private fun authenticatedRequest(url: URL): Request.Builder =
         Request.Builder()
             .url(url)
-            .header("User-Agent", "QuyangNotes/0.5.0")
+            .header("User-Agent", "QuyangNotes/0.5.1")
             .apply {
                 if (config.username.isNotBlank() || config.password.isNotBlank()) {
                     header("Authorization", Credentials.basic(config.username, config.password))

@@ -318,7 +318,7 @@ fun SettingsScreen(
             item {
                 ListItem(
                     leadingContent = { Icon(Icons.Outlined.Info, null) },
-                    headlineContent = { Text("曲阳便签 0.5.0") },
+                    headlineContent = { Text("曲阳便签 0.5.1") },
                     supportingContent = { Text("MIT License · 本地优先 · 无广告") },
                 )
             }

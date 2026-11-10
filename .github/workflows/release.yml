@@ -36,9 +36,10 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           VERSION_NAME="${GITHUB_REF_NAME#v}"
+          VERSION_CODE="$(printf '%s' "$VERSION_NAME" | awk -F. '{printf "%d%03d%03d", $1, $2, $3}')"
           ./gradlew testDebugUnitTest lintDebug assembleRelease \
             -PversionName="$VERSION_NAME" \
-            -PversionCode="$GITHUB_RUN_NUMBER"
+            -PversionCode="$VERSION_CODE"
 
       - name: Verify and package
         run: |
