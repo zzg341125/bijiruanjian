@@ -80,7 +80,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -724,18 +723,19 @@ fun EditorScreen(
                 if (!preview) {
                     BasicTextField(
                         value = title,
-                        onValueChange = ::setTitleWithHistory,
+                        onValueChange = {
+                            setTitleWithHistory(it.replace('\n', ' ').replace('\r', ' '))
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(editorLineSpacing)
-                            .clipToBounds(),
+                            .heightIn(min = editorLineSpacing),
                         textStyle = TextStyle(
                             color = EditorInk,
                             fontSize = 24.sp,
                             lineHeight = 32.sp,
                             fontWeight = FontWeight.Bold,
                         ),
-                        singleLine = true,
+                        singleLine = false,
                         cursorBrush = SolidColor(EditorInk),
                         decorationBox = { innerTextField ->
                             if (title.isBlank()) {
@@ -780,14 +780,11 @@ fun EditorScreen(
                     Text(
                         text = title.ifBlank { "无标题" },
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(editorLineSpacing),
+                            .fillMaxWidth(),
                         color = EditorInk,
                         fontSize = 24.sp,
                         lineHeight = 32.sp,
                         fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                     MarkdownPreview(
                         markdown = editorBody,
