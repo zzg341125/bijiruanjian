@@ -16,4 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "LatticeNotes"
 include(":app")
-include(":weave-office")
+include(":oaf-office")

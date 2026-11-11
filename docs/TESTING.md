@@ -1,11 +1,12 @@
 # Testing notes
 
-Tested on 2026-11-10 with:
+Tested on 2026-11-11 with:
 
 - Android emulator API 37
 - JDK 21
 - Gradle 8.9
 - Android Gradle Plugin 8.7.3
+- 曲阳便签 `0.10.0` (`versionCode` 10000)
 
 ## Automated checks
 
@@ -16,12 +17,15 @@ Tested on 2026-11-10 with:
 ./gradlew assembleRelease
 ```
 
-Result on 2026-11-10:
+Result on 2026-11-11:
 
 - 60 unit tests pass with 0 failures and 0 errors.
-- Lint: 0 errors, 32 existing launcher-icon warnings.
+- Lint: 0 errors, 128 warnings (mostly upstream OAF deprecation and launcher-icon notices).
 - Debug APK builds and installs.
-- Release build passes R8 minification and produces an unsigned APK.
+- Release build passes R8 minification and produces a 34.8 MB unsigned APK.
+- A debug-key-signed copy of the minified release APK installs and launches successfully.
+- The minified release APK opens and edits DOCX through OAF; the edit remains after process restart.
+- Release APK includes arm64-v8a, armeabi-v7a, x86 and x86_64; minimum Android is API 29.
 - Encrypted full backup round-trips notes, folders, reminders and embedded attachments.
 - A wrong backup password fails with an actionable error and does not return partial data.
 - WebDAV connection creates the dedicated `曲阳便签` folder when it does not exist.
@@ -41,7 +45,7 @@ Result on 2026-11-10:
 - Nutstore Link-header pagination follows all `rel="next"` pages on the same server.
 - Remote-imported files are not uploaded again during the same sync.
 - Sync summary reports the actual number of Nutstore directory pages scanned.
-- Local debug APK versionCode is 7006 so installing 0.7.6 must replace older builds.
+- Local APK versionCode is 10000 for version 0.10.0.
 - WebDAV folder traversal includes nested subfolders and preserves relative Markdown paths.
 - The download-and-restore action shows the full sync result rather than a fixed success message.
 - Imported notes are written before their attachments, satisfying the SQLite foreign key.
@@ -54,8 +58,13 @@ Result on 2026-11-10:
 - Binary sync state is independent from Markdown state and keeps the remote relative path.
 - Room migration 1→2 adds the binary-note marker without deleting existing notes.
 - New notes use their title for the first remote filename, then keep that name stable.
-- DOCX/XLSX use the embedded MIT-licensed Weave Office engine on arm64-v8a.
-- The merged debug APK includes `WeaveOfficeActivity` and its four native libraries.
+- DOCX/XLSX use the embedded Apache-2.0 OAF Office engine on all packaged ABIs.
+- OAF starts as an internal `exported=false` activity and does not require WPS or Microsoft 365.
+- OAF and the host app use separate DataStore files, avoiding a single-process DataStore crash.
+- Back returns from an OAF document or spreadsheet to the originating 曲阳便签 editor.
+- A DOCX edit was saved in place to the original attachment and the updated text was present in `word/document.xml`.
+- An XLSX cell edit was saved in place to the original attachment and the updated value was present in `xl/sharedStrings.xml`.
+- OAF receives the original attachment display name while reading and writing the host app's private file path.
 
 ## Manual smoke test
 

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The "o" mark: a navy ring opened by an orange arc, with a dot at its centre. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:strokeColor="#1F3B63" android:strokeWidth="10"
+        android:pathData="M54,30a24,24 0 1,1 0,48a24,24 0 1,1 0,-48z" />
+    <path android:strokeColor="#E8763A" android:strokeWidth="10" android:strokeLineCap="round"
+        android:pathData="M54,30A24,24 0 0,1 78,54" />
+    <path android:fillColor="#1F3B63" android:pathData="M47,54a7,7 0 1,0 14,0a7,7 0 1,0 -14,0z" />
+</vector>

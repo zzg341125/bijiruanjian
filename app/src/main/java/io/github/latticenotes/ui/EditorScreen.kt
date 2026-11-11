@@ -110,7 +110,7 @@ import io.github.latticenotes.reminder.ReminderScheduler
 import io.github.latticenotes.share.ShareImage
 import io.github.latticenotes.util.AttachmentReferences
 import io.github.latticenotes.util.isImageAttachment
-import io.github.frozencaviar.weaveoffice.WeaveOfficeActivity
+import com.prempoddar.oaf.MainActivity as OafMainActivity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -1257,23 +1257,25 @@ private fun openAttachment(context: Context, attachment: AttachmentEntity) {
             ?.takeIf { it.isNotBlank() }
             ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
             ?: "application/octet-stream"
-        if (
-            (extension == "docx" || extension == "xlsx") &&
-            Build.SUPPORTED_ABIS.contains("arm64-v8a")
-        ) {
+        if (extension == "docx" || extension == "xlsx") {
             try {
-                File(context.filesDir, "update-check-off").writeText("1")
                 context.startActivity(
-                    Intent(context, WeaveOfficeActivity::class.java).apply {
-                        action = Intent.ACTION_VIEW
-                        setDataAndType(uri, mimeType)
+                    Intent(context, OafMainActivity::class.java).apply {
+                        action = Intent.ACTION_EDIT
+                        setDataAndType(Uri.fromFile(File(path)), mimeType)
+                        putExtra(OafMainActivity.EXTRA_DISPLAY_NAME, attachment.name)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
                     },
                 )
                 return
-            } catch (_: Throwable) {
-                // Fall through to an installed Office app if the embedded engine cannot start.
+            } catch (it: Throwable) {
+                Toast.makeText(
+                    context,
+                    "内置 Office 编辑器无法打开：${it.message}",
+                    Toast.LENGTH_LONG,
+                ).show()
+                return
             }
         }
         val mimeCandidates = listOf(mimeType, "application/octet-stream", "*/*").distinct()

@@ -10,28 +10,25 @@ fun buildConfigString(value: String): String =
 
 android {
     namespace = "io.github.latticenotes"
-    compileSdk = 34
+    compileSdk = 35
 
     val releaseVersionCode = providers.gradleProperty("versionCode")
         .orNull
         ?.toIntOrNull()
-        ?: 9_001
+        ?: 10_000
     val releaseVersionName = providers.gradleProperty("versionName")
         .orNull
-        ?: "0.9.1"
+        ?: "0.10.0"
     val personalWebDavUrl = providers.gradleProperty("personalWebDavUrl").orNull.orEmpty()
     val personalWebDavUsername = providers.gradleProperty("personalWebDavUsername").orNull.orEmpty()
     val personalWebDavPassword = providers.gradleProperty("personalWebDavPassword").orNull.orEmpty()
 
     defaultConfig {
         applicationId = "io.github.latticenotes"
-        minSdk = 26
+        minSdk = 29
         targetSdk = 34
         versionCode = releaseVersionCode
         versionName = releaseVersionName
-        ndk {
-            abiFilters += "arm64-v8a"
-        }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -125,7 +122,7 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation(project(":weave-office"))
+    implementation(project(":oaf-office"))
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

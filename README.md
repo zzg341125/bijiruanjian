@@ -22,7 +22,7 @@
 - 图片可直接嵌入便签正文，并随文档预览和导出
 - 任意文档附件
 - 图片附件可嵌入 Markdown 记事和单文件 HTML
-- 内置 Weave Office 引擎，可直接打开和编辑 docx/xlsx（arm64-v8a）
+- 内置 OAF Office 编辑器，可离线打开、编辑并原位保存 docx/xlsx，不依赖 WPS 或 Microsoft 365
 - 导出正文、图片和内置图标合并的单文件 HTML
 - 密码加密的完整备份：记事、文件夹、提醒、图片和附件统一导出为 `.qbak`
 - 直接批量导入 `.md` 文件
@@ -44,8 +44,9 @@
 环境要求：
 
 - JDK 21
-- Android SDK Platform 34
-- Android Build-Tools 34.0.0 或更新版本
+- Android 10（API 29）或更新版本
+- Android SDK Platform 35
+- Android Build-Tools 35.0.0 或更新版本
 
 ```bash
 ./gradlew assembleDebug
@@ -97,8 +98,8 @@ app/build/outputs/apk/debug/app-debug.apk
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.9.1
-git push origin v0.9.1
+git tag v0.10.0
+git push origin v0.10.0
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。
@@ -116,8 +117,17 @@ Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、�
 
 ## 当前边界
 
-应用不依赖云账号、付费服务或远程 AI。知识检索在设备本地执行，在线备份使用用户自己的 WebDAV 服务器。每篇记事以独立 Markdown 文件保存，同步使用 ETag 和内容哈希避免重复下载，图片会以数据 URI 嵌入对应记事。详见 [功能对照](docs/FEATURE_PARITY.md)。
+应用不依赖云账号、付费服务、远程 AI 或外部 Office 软件。Word 和 Excel 文件由内置 OAF
+编辑器离线打开，修改后直接写回原附件，保留原文件名并继续随 WebDAV 同步。复杂宏、
+外链数据和部分高级 Office 版式可能无法完整编辑；需要保真的最终排版仍建议在桌面版
+Office 中检查。知识检索在设备本地执行，在线备份使用用户自己的 WebDAV 服务器。每篇
+记事以独立 Markdown 文件保存，同步使用 ETag 和内容哈希避免重复下载，图片会以数据
+URI 嵌入对应记事。详见 [功能对照](docs/FEATURE_PARITY.md)。
 
 ## 许可证
 
 [MIT](LICENSE)
+
+内置 Office 编辑器基于 Apache License 2.0 的
+[OAF](oaf-office/README.md)，许可证全文见
+[LICENSE-OAF.txt](oaf-office/LICENSE-OAF.txt)。

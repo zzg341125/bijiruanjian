@@ -7,6 +7,7 @@ import io.github.latticenotes.data.AppDatabase
 import io.github.latticenotes.data.CredentialVault
 import io.github.latticenotes.data.NotesRepository
 import io.github.latticenotes.data.SettingsRepository
+import com.prempoddar.oaf.AppGraph
 
 class AppContainer(application: Application) {
     private val database = AppDatabase.build(application)
@@ -21,6 +22,7 @@ class LatticeApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppGraph.init(this)
         container = AppContainer(this)
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
