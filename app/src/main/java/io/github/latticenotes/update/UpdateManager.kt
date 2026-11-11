@@ -33,7 +33,7 @@ object UpdateManager {
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
-        .callTimeout(3, TimeUnit.MINUTES)
+        .writeTimeout(90, TimeUnit.SECONDS)
         .build()
 
     suspend fun checkForUpdate(
