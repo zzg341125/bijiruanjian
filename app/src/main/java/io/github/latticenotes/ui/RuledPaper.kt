@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 fun RuledPaper(
     modifier: Modifier = Modifier,
     lineSpacing: Dp = 34.dp,
+    scrollOffset: Int = 0,
     paperColor: Color? = null,
     lineColor: Color? = null,
     marginColor: Color? = null,
@@ -27,7 +28,9 @@ fun RuledPaper(
         modifier = modifier.drawBehind {
             drawRect(paper)
             val step = lineSpacing.toPx()
-            var y = step
+            if (step <= 0f) return@drawBehind
+            val phase = (scrollOffset.toFloat() % step + step) % step
+            var y = step - phase
             while (y < size.height) {
                 drawLine(
                     color = line,

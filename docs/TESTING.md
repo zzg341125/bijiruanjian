@@ -6,7 +6,7 @@ Tested on 2026-11-11 with:
 - JDK 21
 - Gradle 8.9
 - Android Gradle Plugin 8.7.3
-- 曲阳便签 `0.10.0` (`versionCode` 10000)
+- 曲阳便签 `0.11.0` (`versionCode` 11000)
 
 ## Automated checks
 
@@ -19,7 +19,7 @@ Tested on 2026-11-11 with:
 
 Result on 2026-11-11:
 
-- 60 unit tests pass with 0 failures and 0 errors.
+- 64 unit tests pass with 0 failures and 0 errors.
 - Lint: 0 errors, 128 warnings (mostly upstream OAF deprecation and launcher-icon notices).
 - Debug APK builds and installs.
 - Release build passes R8 minification and produces a 34.8 MB unsigned APK.
@@ -45,7 +45,7 @@ Result on 2026-11-11:
 - Nutstore Link-header pagination follows all `rel="next"` pages on the same server.
 - Remote-imported files are not uploaded again during the same sync.
 - Sync summary reports the actual number of Nutstore directory pages scanned.
-- Local APK versionCode is 10000 for version 0.10.0.
+- Local APK versionCode is 11000 for version 0.11.0.
 - WebDAV folder traversal includes nested subfolders and preserves relative Markdown paths.
 - The download-and-restore action shows the full sync result rather than a fixed success message.
 - Imported notes are written before their attachments, satisfying the SQLite foreign key.
@@ -65,6 +65,10 @@ Result on 2026-11-11:
 - A DOCX edit was saved in place to the original attachment and the updated text was present in `word/document.xml`.
 - An XLSX cell edit was saved in place to the original attachment and the updated value was present in `xl/sharedStrings.xml`.
 - OAF receives the original attachment display name while reading and writing the host app's private file path.
+- Ruled-paper lines now follow the same scroll offset as title and body text.
+- Title, metadata and body line heights scale together with the configured app font size.
+- GitHub Release parsing covers version-code ordering, APK selection and digest extraction.
+- Online updates download to app cache, verify SHA-256 and signer compatibility before opening the system installer.
 
 ## Manual smoke test
 

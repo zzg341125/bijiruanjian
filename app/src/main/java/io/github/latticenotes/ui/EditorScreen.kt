@@ -88,6 +88,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -303,6 +304,7 @@ fun EditorScreen(
     val imageAttachments = attachments.filter(AttachmentEntity::isImageAttachment)
     val fileAttachments = attachments.filterNot(AttachmentEntity::isImageAttachment)
     val editorBody = AttachmentReferences.plainText(body)
+    val editorLineSpacing = with(LocalDensity.current) { 32.sp.toDp() }
 
 
     Scaffold(
@@ -583,7 +585,8 @@ fun EditorScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            lineSpacing = 32.dp,
+            lineSpacing = editorLineSpacing,
+            scrollOffset = documentScroll.value,
             paperColor = EditorPaper,
             lineColor = EditorRule.copy(alpha = 0.7f),
             marginColor = EditorRule.copy(alpha = 0.78f),
@@ -597,7 +600,7 @@ fun EditorScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(32.dp),
+                        .height(editorLineSpacing),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Row(
@@ -724,7 +727,7 @@ fun EditorScreen(
                         onValueChange = ::setTitleWithHistory,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(32.dp)
+                            .height(editorLineSpacing)
                             .clipToBounds(),
                         textStyle = TextStyle(
                             color = EditorInk,
@@ -778,7 +781,7 @@ fun EditorScreen(
                         text = title.ifBlank { "无标题" },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(32.dp),
+                            .height(editorLineSpacing),
                         color = EditorInk,
                         fontSize = 24.sp,
                         lineHeight = 32.sp,

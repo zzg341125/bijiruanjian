@@ -26,6 +26,7 @@ data class AppSettings(
     val webDavUrl: String = "",
     val webDavUsername: String = "",
     val webDavAutoSync: Boolean = true,
+    val autoUpdateCheck: Boolean = true,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -40,6 +41,7 @@ class SettingsRepository(private val context: Context) {
         val webDavUrl = stringPreferencesKey("webdav_url")
         val webDavUsername = stringPreferencesKey("webdav_username")
         val webDavAutoSync = booleanPreferencesKey("webdav_auto_sync")
+        val autoUpdateCheck = booleanPreferencesKey("auto_update_check")
     }
 
     val settings: Flow<AppSettings> = context.settingsDataStore.data
@@ -63,6 +65,7 @@ class SettingsRepository(private val context: Context) {
                     preferences[Keys.webDavUsername].orEmpty()
                 },
                 webDavAutoSync = preferences[Keys.webDavAutoSync] ?: true,
+                autoUpdateCheck = preferences[Keys.autoUpdateCheck] ?: true,
             )
         }
 
@@ -91,6 +94,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setWebDavAutoSync(enabled: Boolean) {
         context.settingsDataStore.edit { it[Keys.webDavAutoSync] = enabled }
+    }
+
+    suspend fun setAutoUpdateCheck(enabled: Boolean) {
+        context.settingsDataStore.edit { it[Keys.autoUpdateCheck] = enabled }
     }
 
     suspend fun clearWebDav() {

@@ -56,6 +56,8 @@ import io.github.latticenotes.data.SettingsRepository
 import io.github.latticenotes.data.WebDavClient
 import io.github.latticenotes.data.WebDavConfig
 import io.github.latticenotes.reminder.ReminderScheduler
+import io.github.latticenotes.update.AppUpdate
+import io.github.latticenotes.update.UpdateManager
 import io.github.latticenotes.util.PinHasher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -82,6 +84,8 @@ fun SettingsScreen(
     var importBackupUri by remember { mutableStateOf<Uri?>(null) }
     var exportPasswordDialog by remember { mutableStateOf(false) }
     var importPasswordDialog by remember { mutableStateOf(false) }
+    var checkingUpdate by remember { mutableStateOf(false) }
+    var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
 
     val exportBackupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
@@ -384,6 +388,63 @@ fun SettingsScreen(
             }
             item { HorizontalDivider(Modifier.padding(vertical = 10.dp)) }
             item {
+                Text(
+                    "在线更新",
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text("启动时自动检查更新") },
+                    supportingContent = {
+                        Text("每天最多检查一次；发现新版本后提示下载并进入系统安装")
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.autoUpdateCheck,
+                            onCheckedChange = {
+                                scope.launch { settingsRepository.setAutoUpdateCheck(it) }
+                            },
+                        )
+                    },
+                )
+            }
+            item {
+                ListItem(
+                    leadingContent = { Icon(Icons.Outlined.Refresh, null) },
+                    headlineContent = { Text("检查在线更新") },
+                    supportingContent = {
+                        Text(
+                            if (checkingUpdate) {
+                                "正在检查 GitHub Release…"
+                            } else {
+                                "当前版本 ${BuildConfig.VERSION_NAME}"
+                            },
+                        )
+                    },
+                    modifier = if (checkingUpdate) Modifier else Modifier.clickableItem {
+                        checkingUpdate = true
+                        scope.launch {
+                            runCatching { UpdateManager.checkForUpdate() }
+                                .onSuccess { update ->
+                                    if (update == null) {
+                                        snackbar.showSnackbar("当前已是最新版本")
+                                    } else {
+                                        availableUpdate = update
+                                    }
+                                }
+                                .onFailure {
+                                    snackbar.showSnackbar("检查更新失败：${it.message}")
+                                }
+                            checkingUpdate = false
+                        }
+                    },
+                )
+            }
+            item { HorizontalDivider(Modifier.padding(vertical = 10.dp)) }
+            item {
                 ListItem(
                     leadingContent = { Icon(Icons.Outlined.Info, null) },
                     headlineContent = { Text("曲阳便签 ${BuildConfig.VERSION_NAME}") },
@@ -569,6 +630,9 @@ fun SettingsScreen(
                 }
             },
         )
+    }
+    availableUpdate?.let { update ->
+        UpdateAvailableDialog(update = update, onDismiss = { availableUpdate = null })
     }
 }
 

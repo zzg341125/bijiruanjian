@@ -16,7 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun InlineDocumentEditor(
@@ -27,6 +29,20 @@ fun InlineDocumentEditor(
     modifier: Modifier = Modifier,
 ) {
     val currentOnValueChange by rememberUpdatedState(onValueChange)
+    val density = LocalDensity.current
+    val textSizePx = with(density) { 20.sp.toPx() }
+    val lineHeightPx = with(density) { 32.sp.toPx() }
+
+    fun applyTypography(editor: EditText) {
+        val oldSize = editor.textSize
+        editor.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
+        if (oldSize == textSizePx && editor.tag == lineHeightPx) return
+        val metrics = editor.paint.fontMetrics
+        val fontHeight = metrics.descent - metrics.ascent
+        editor.setLineSpacing((lineHeightPx - fontHeight).coerceAtLeast(0f), 1f)
+        editor.tag = lineHeightPx
+    }
+
     AndroidView(
         modifier = modifier.clipToBounds(),
         factory = { context ->
@@ -49,8 +65,7 @@ fun InlineDocumentEditor(
                 )
                 setPadding(0, 0, 0, 0)
                 setTextColor(textColor.toArgb())
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
-                setLineSpacing(9f * resources.displayMetrics.scaledDensity, 1f)
+                applyTypography(this)
                 addTextChangedListener(object : TextWatcher {
                     override fun beforeTextChanged(
                         text: CharSequence?,
@@ -75,6 +90,7 @@ fun InlineDocumentEditor(
             }
         },
         update = { editor ->
+            applyTypography(editor)
             val current = editor.text?.toString().orEmpty()
             val initialBinding = !editor.hasBoundInitialValue
             if (current != value) {

@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -22,6 +23,8 @@ import io.github.latticenotes.data.NoteFormat
 import io.github.latticenotes.data.NotesRepository
 import io.github.latticenotes.data.OnlineSyncManager
 import io.github.latticenotes.data.SettingsRepository
+import io.github.latticenotes.update.AppUpdate
+import io.github.latticenotes.update.UpdateManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -43,8 +46,20 @@ fun AppNav(
 ) {
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var startSearch by remember { mutableStateOf(launchRequest?.destination == "search") }
+    var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
+
+    LaunchedEffect(settings.autoUpdateCheck) {
+        if (!settings.autoUpdateCheck || !UpdateManager.shouldAutoCheck(context)) {
+            return@LaunchedEffect
+        }
+        runCatching { UpdateManager.checkForUpdate() }
+            .onSuccess { availableUpdate = it }
+            .onFailure { Log.d("AppUpdate", "Automatic update check failed: ${it.message}") }
+        UpdateManager.markAutoChecked(context)
+    }
 
     LaunchedEffect(settings.webDavUrl, settings.webDavAutoSync, lifecycleOwner) {
         if (!settings.webDavAutoSync || settings.webDavUrl.isBlank()) return@LaunchedEffect
@@ -128,5 +143,9 @@ fun AppNav(
                 onOpenNote = { navController.navigate("editor/$it") },
             )
         }
+    }
+
+    availableUpdate?.let { update ->
+        UpdateAvailableDialog(update = update, onDismiss = { availableUpdate = null })
     }
 }

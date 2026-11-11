@@ -30,6 +30,7 @@
 - 自动创建「曲阳便签」WebDAV 专用目录，支持批量同步几十个 Markdown 文件
 - Obsidian 式三方同步：本地、远端和上次记录对比，支持冲突与删除传播
 - 超过一半的批量删除会被自动拦截，避免 WebDAV 异常导致本地笔记全部丢失
+- GitHub Release 在线更新：每天自动检查，校验 SHA-256 与签名后打开系统安装界面
 - 笔记提醒与系统通知
 - 飞机按钮操作面板：复制文字、文字分享、图片分享、发送邮件
 - PIN 应用锁
@@ -98,8 +99,8 @@ app/build/outputs/apk/debug/app-debug.apk
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.10.0
-git push origin v0.10.0
+git tag v0.11.0
+git push origin v0.11.0
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。
