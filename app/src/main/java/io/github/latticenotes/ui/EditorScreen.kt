@@ -27,6 +27,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -82,6 +83,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -629,18 +631,36 @@ fun EditorScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            lineSpacing = editorLineSpacing,
-            scrollOffset = documentScroll.value,
             paperColor = EditorPaper,
-            lineColor = EditorRule.copy(alpha = 0.7f),
             marginColor = EditorRule.copy(alpha = 0.78f),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(documentScroll)
-                    .padding(start = 54.dp, end = 18.dp),
-            ) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val pageHeight = maxHeight
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(documentScroll),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = pageHeight)
+                            .drawBehind {
+                                val step = editorLineSpacing.toPx()
+                                if (step <= 0f) return@drawBehind
+                                var y = step
+                                while (y < size.height) {
+                                    drawLine(
+                                        color = EditorRule.copy(alpha = 0.7f),
+                                        start = Offset(0f, y),
+                                        end = Offset(size.width, y),
+                                        strokeWidth = 1.1f,
+                                    )
+                                    y += step
+                                }
+                            }
+                            .padding(start = 54.dp, end = 18.dp),
+                    ) {
                 if (!preview) {
                     BasicTextField(
                         value = title,
@@ -746,6 +766,8 @@ fun EditorScreen(
                         onOpen = { openAttachment(context, it) },
                         onDelete = { attachmentToDelete = it },
                     )
+                }
+                    }
                 }
             }
         }

@@ -810,6 +810,13 @@ private fun NoteCard(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth()) {
+        PaperclipGlyph(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = (-5).dp)
+                .rotate(-90f)
+                .size(34.dp),
+        )
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -961,13 +968,6 @@ private fun NoteCard(
                 }
             }
         }
-        PaperclipGlyph(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .offset(x = (-3).dp)
-                .rotate(-18f)
-                .size(31.dp),
-        )
     }
 }
 

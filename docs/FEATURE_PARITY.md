@@ -27,7 +27,7 @@ account services, or paid backend behavior.
 | Markdown note files | One `note-ID.md` per note |
 | WebDAV online backup and restore | Yes, Obsidian-style three-way sync |
 | Direct Markdown import | Yes |
-| Ruled paper editor | Yes |
+| Ruled paper editor | Yes, rules scroll with document content |
 | Title-first document flow | Yes, Enter moves from the title into the body |
 | Fixed home search | Yes |
 | Paperclip home list | Yes, with a compact rounded search field |

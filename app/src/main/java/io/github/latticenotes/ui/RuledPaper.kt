@@ -8,38 +8,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 @Composable
 fun RuledPaper(
     modifier: Modifier = Modifier,
-    lineSpacing: Dp = 34.dp,
-    scrollOffset: Int = 0,
     paperColor: Color? = null,
-    lineColor: Color? = null,
     marginColor: Color? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val paper = paperColor ?: MaterialTheme.colorScheme.surface
-    val line = lineColor ?: MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
     val margin = marginColor ?: MaterialTheme.colorScheme.tertiary.copy(alpha = 0.34f)
     Box(
         modifier = modifier.drawBehind {
             drawRect(paper)
-            val step = lineSpacing.toPx()
-            if (step <= 0f) return@drawBehind
-            val phase = (scrollOffset.toFloat() % step + step) % step
-            var y = step - phase
-            while (y < size.height) {
-                drawLine(
-                    color = line,
-                    start = Offset(0f, y),
-                    end = Offset(size.width, y),
-                    strokeWidth = 1.1f,
-                )
-                y += step
-            }
             val marginX = 34.dp.toPx()
             drawLine(
                 color = margin,
