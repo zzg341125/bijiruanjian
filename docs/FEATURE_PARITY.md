@@ -30,6 +30,7 @@ account services, or paid backend behavior.
 | Ruled paper editor | Yes |
 | Title-first document flow | Yes, Enter moves from the title into the body |
 | Fixed home search | Yes |
+| Paperclip home list | Yes, with a compact rounded search field |
 | Undo and redo history | Yes |
 | Visible rich-text formatting toolbar | Yes, Markdown remains hidden in the editor |
 | Self-contained HTML export | Yes |

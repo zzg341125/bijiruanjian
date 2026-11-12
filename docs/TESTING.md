@@ -6,7 +6,7 @@ Tested on 2026-11-12 with:
 - JDK 21
 - Gradle 8.9
 - Android Gradle Plugin 8.7.3
-- 曲阳便签 `0.11.5` (`versionCode` 11005)
+- 曲阳便签 `0.11.6` (`versionCode` 11006)
 
 ## Automated checks
 
@@ -45,7 +45,7 @@ Result on 2026-11-12:
 - Nutstore Link-header pagination follows all `rel="next"` pages on the same server.
 - Remote-imported files are not uploaded again during the same sync.
 - Sync summary reports the actual number of Nutstore directory pages scanned.
-- Local APK versionCode is 11005 for version 0.11.5.
+- Local APK versionCode is 11006 for version 0.11.6.
 - WebDAV folder traversal includes nested subfolders and preserves relative Markdown paths.
 - The download-and-restore action shows the full sync result rather than a fixed success message.
 - Imported notes are written before their attachments, satisfying the SQLite foreign key.
@@ -88,6 +88,11 @@ Result on 2026-11-12:
 - Pressing Enter in the title moves focus into the body without adding a line break to the title.
 - Ruled-paper line spacing is derived from the configured font scale, so the rules remain aligned
   with title and body text at 80%, 100% and 150% sizes.
+- The supplied wooden note and red pencil artwork is used for adaptive, round and legacy launcher
+  icons.
+- The home header keeps its category action on the title itself without a trailing arrow control.
+- The home search field is a compact 44dp rounded capsule.
+- Home note cards have a custom-drawn paperclip at their left edge.
 
 ## Manual smoke test
 

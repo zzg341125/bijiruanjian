@@ -4,6 +4,7 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,6 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
@@ -71,9 +74,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.focus.FocusRequester
@@ -213,11 +222,6 @@ fun HomeScreen(
                             Text(
                                 text = categoryTitle,
                                 fontWeight = FontWeight.SemiBold,
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                text = if (categoryMenuOpen) "▴" else "▾",
-                                style = MaterialTheme.typography.titleSmall,
                             )
                         }
                         DropdownMenu(
@@ -392,24 +396,10 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                    .focusRequester(searchFocus),
-                placeholder = { Text("搜索标题、正文或标签") },
-                leadingIcon = { Icon(Icons.Outlined.Search, null) },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { query = "" }) {
-                            Icon(Icons.Outlined.Close, "清空")
-                        }
-                    }
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            HomeSearchField(
+                query = query,
+                onQueryChange = { query = it },
+                focusRequester = searchFocus,
             )
 
             Box(
@@ -735,6 +725,74 @@ private fun categoryTimestamp(value: Long): String =
         .atZone(ZoneId.systemDefault())
         .format(categoryTimeFormatter)
 
+@Composable
+private fun HomeSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    focusRequester: FocusRequester,
+) {
+    androidx.compose.material3.Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .height(44.dp),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 14.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Search,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(9.dp))
+            Box(Modifier.weight(1f)) {
+                if (query.isBlank()) {
+                    Text(
+                        text = "搜索标题、正文或标签",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                    )
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    textStyle = TextStyle(
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                        lineHeight = MaterialTheme.typography.bodyMedium.lineHeight,
+                    ),
+                    singleLine = true,
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                )
+            }
+            if (query.isNotEmpty()) {
+                IconButton(
+                    onClick = { onQueryChange("") },
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        Icons.Outlined.Close,
+                        contentDescription = "清空",
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun NoteCard(
@@ -751,71 +809,73 @@ private fun NoteCard(
     onShare: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = { menuOpen = true },
+    Box(Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 14.dp)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = { menuOpen = true },
+                ),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFFF3E8D3),
+                contentColor = Color(0xFF20231F),
             ),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFF3E8D3),
-            contentColor = Color(0xFF20231F),
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-    ) {
-        Column(
-            Modifier
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-                .drawBehind {
-                    val step = 32.dp.toPx()
-                    var y = step
-                    while (y < size.height) {
-                        drawLine(
-                            color = Color(0xFF8D806E).copy(alpha = 0.12f),
-                            start = androidx.compose.ui.geometry.Offset(0f, y),
-                            end = androidx.compose.ui.geometry.Offset(size.width, y),
-                            strokeWidth = 1f,
-                        )
-                        y += step
-                    }
-                },
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         ) {
-            Text(
-                text = formatTimestamp(note.updatedAt),
-                style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF676B66),
-            )
-            Spacer(Modifier.height(3.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(
+                Modifier
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .drawBehind {
+                        val step = 32.dp.toPx()
+                        var y = step
+                        while (y < size.height) {
+                            drawLine(
+                                color = Color(0xFF8D806E).copy(alpha = 0.12f),
+                                start = androidx.compose.ui.geometry.Offset(0f, y),
+                                end = androidx.compose.ui.geometry.Offset(size.width, y),
+                                strokeWidth = 1f,
+                            )
+                            y += step
+                        }
+                    },
+            ) {
                 Text(
-                    text = note.title.ifBlank { "无标题" },
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    text = formatTimestamp(note.updatedAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF676B66),
                 )
-                if (note.pinned) {
-                    Icon(
-                        Icons.Outlined.Star,
-                        contentDescription = "已置顶",
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary,
+                Spacer(Modifier.height(3.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = note.title.ifBlank { "无标题" },
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                    Spacer(Modifier.width(8.dp))
-                }
-                Box {
-                    IconButton(
-                        onClick = { menuOpen = true },
-                        modifier = Modifier.size(36.dp),
-                    ) {
-                        Icon(Icons.Outlined.MoreVert, "更多操作", Modifier.size(20.dp))
+                    if (note.pinned) {
+                        Icon(
+                            Icons.Outlined.Star,
+                            contentDescription = "已置顶",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.width(8.dp))
                     }
-                    DropdownMenu(
-                        expanded = menuOpen,
-                        onDismissRequest = { menuOpen = false },
-                    ) {
+                    Box {
+                        IconButton(
+                            onClick = { menuOpen = true },
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(Icons.Outlined.MoreVert, "更多操作", Modifier.size(20.dp))
+                        }
+                        DropdownMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { menuOpen = false },
+                        ) {
                         if (trashed) {
                             DropdownMenuItem(
                                 text = { Text("恢复") },
@@ -896,10 +956,99 @@ private fun NoteCard(
                                 },
                             )
                         }
+                        }
                     }
                 }
             }
         }
+        PaperclipGlyph(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = (-3).dp)
+                .rotate(-18f)
+                .size(31.dp),
+        )
+    }
+}
+
+@Composable
+private fun PaperclipGlyph(
+    modifier: Modifier = Modifier,
+    color: Color = Color(0xFF969087).copy(alpha = 0.86f),
+) {
+    Canvas(modifier) {
+        val stroke = 2.1.dp.toPx()
+        val path = Path().apply {
+            moveTo(size.width * 0.62f, size.height * 0.10f)
+            cubicTo(
+                size.width * 0.82f,
+                size.height * 0.06f,
+                size.width * 0.94f,
+                size.height * 0.19f,
+                size.width * 0.86f,
+                size.height * 0.36f,
+            )
+            lineTo(size.width * 0.48f, size.height * 0.86f)
+            cubicTo(
+                size.width * 0.39f,
+                size.height * 0.98f,
+                size.width * 0.22f,
+                size.height * 0.97f,
+                size.width * 0.16f,
+                size.height * 0.84f,
+            )
+            cubicTo(
+                size.width * 0.08f,
+                size.height * 0.69f,
+                size.width * 0.17f,
+                size.height * 0.55f,
+                size.width * 0.28f,
+                size.height * 0.43f,
+            )
+            lineTo(size.width * 0.67f, size.height * 0.04f)
+            cubicTo(
+                size.width * 0.78f,
+                size.height * -0.04f,
+                size.width * 0.92f,
+                size.height * 0.03f,
+                size.width * 0.91f,
+                size.height * 0.16f,
+            )
+            cubicTo(
+                size.width * 0.90f,
+                size.height * 0.24f,
+                size.width * 0.85f,
+                size.height * 0.31f,
+                size.width * 0.79f,
+                size.height * 0.37f,
+            )
+            lineTo(size.width * 0.40f, size.height * 0.81f)
+            cubicTo(
+                size.width * 0.34f,
+                size.height * 0.88f,
+                size.width * 0.25f,
+                size.height * 0.86f,
+                size.width * 0.23f,
+                size.height * 0.78f,
+            )
+            cubicTo(
+                size.width * 0.21f,
+                size.height * 0.72f,
+                size.width * 0.25f,
+                size.height * 0.66f,
+                size.width * 0.30f,
+                size.height * 0.61f,
+            )
+            lineTo(size.width * 0.68f, size.height * 0.20f)
+        }
+        drawPath(
+            path = path,
+            color = color,
+            style = Stroke(
+                width = stroke,
+                cap = StrokeCap.Round,
+            ),
+        )
     }
 }
 

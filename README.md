@@ -15,6 +15,7 @@
 - 普通文本、Markdown、待办三种便签模式
 - 标题、正文、标签、文件夹和自动保存
 - 主页固定搜索框
+- 首页采用圆角紧凑搜索栏、左侧回形针笔记卡片和无箭头分类标题
 - 编辑器撤销/重做历史
 - 可视化格式工具栏：标题、居中、列表、粗体、引用和待办只显示效果，不暴露 Markdown 代码
 - 信纸编辑器以标题为第一行，回车直接进入正文；格线行高随字号同步调整
@@ -27,7 +28,7 @@
 - 内置 OAF Office 编辑器，可离线打开、编辑并原位保存 docx/xlsx，不依赖 WPS 或 Microsoft 365
 - 打开 Word/Excel 记事时直接进入 Office 编辑器，返回后回到曲阳便签
 - Office 顶部菜单栏固定显示，文档阅读和编辑时都可直接操作
-- 使用新的渐变便签与钢笔启动图标
+- 使用木框信纸与红铅笔作为应用启动图标
 - 导出正文、图片和内置图标合并的单文件 HTML
 - 密码加密的完整备份：记事、文件夹、提醒、图片和附件统一导出为 `.qbak`
 - 直接批量导入 `.md` 文件
@@ -104,8 +105,8 @@ app/build/outputs/apk/debug/app-debug.apk
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.11.5
-git push origin v0.11.5
+git tag v0.11.6
+git push origin v0.11.6
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。
