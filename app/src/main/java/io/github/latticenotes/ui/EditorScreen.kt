@@ -44,6 +44,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowBack
@@ -86,6 +88,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -93,7 +102,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -162,6 +173,7 @@ fun EditorScreen(
     var autoOpenedOffice by remember(noteId) { mutableStateOf(false) }
     val history = remember(noteId) { EditorHistory() }
     val documentEditor = remember(noteId) { DocumentEditorController() }
+    val bodyFocusRequester = remember(noteId) { FocusRequester() }
     val documentScroll = remember(noteId) { ScrollState(0) }
 
     val activity = context.findActivity()
@@ -307,7 +319,7 @@ fun EditorScreen(
     val fileAttachments = attachments.filterNot(AttachmentEntity::isImageAttachment)
     val officeAttachment = fileAttachments.firstEmbeddedOfficeAttachment()
     val editorBody = AttachmentReferences.plainText(body)
-    val editorLineSpacing = with(LocalDensity.current) { 32.sp.toDp() }
+    val editorLineSpacing = EditorTextMetrics.lineHeightDp(LocalDensity.current.fontScale)
 
     LaunchedEffect(noteId, officeAttachment?.id) {
         if (!autoOpenedOffice && officeAttachment != null) {
@@ -575,7 +587,30 @@ fun EditorScreen(
                             }
                         }
                     }
-                }
+                    Surface(color = EditorPaper, shadowElevation = 1.dp) {
+                        EditorInfoBar(
+                            folderName = currentFolder?.name ?: "全部便签",
+                            updatedAt = currentNote?.updatedAt ?: System.currentTimeMillis(),
+                            characterCount = characterCount,
+                            starred = currentNote?.starred == true,
+                            format = format,
+                            menuExpanded = formatMenuOpen,
+                            lineHeight = editorLineSpacing,
+                            onFolderClick = { folderDialog = true },
+                            onStarClick = {
+                                currentNote?.let {
+                                    scope.launch { repository.setStarred(it.id, !it.starred) }
+                                }
+                            },
+                            onMenuExpandedChange = { formatMenuOpen = it },
+                            onSelectFormat = {
+                                format = it
+                                preview = false
+                                formatMenuOpen = false
+                            },
+                        )
+                    }
+            }
             }
         },
         bottomBar = {
@@ -606,130 +641,6 @@ fun EditorScreen(
                     .verticalScroll(documentScroll)
                     .padding(start = 54.dp, end = 18.dp),
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(editorLineSpacing),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(24.dp)
-                            .border(
-                                width = 1.dp,
-                                color = EditorRule,
-                                shape = RoundedCornerShape(3.dp),
-                            )
-                            .clickable { folderDialog = true }
-                            .padding(horizontal = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("▤", color = EditorMutedInk, fontSize = 13.sp)
-                        Spacer(Modifier.width(5.dp))
-                        Text(
-                            text = currentFolder?.name ?: "全部便签",
-                            modifier = Modifier.weight(1f),
-                            color = EditorMutedInk,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text("▾", color = EditorMutedInk, fontSize = 11.sp)
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = editorTimestamp(
-                            currentNote?.updatedAt ?: System.currentTimeMillis(),
-                        ),
-                        color = EditorMutedInk,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                    )
-                    Text(
-                        text = " | $characterCount",
-                        color = EditorMutedInk,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                    )
-                    IconButton(
-                        onClick = {
-                            currentNote?.let {
-                                scope.launch { repository.setStarred(it.id, !it.starred) }
-                            }
-                        },
-                        modifier = Modifier.size(28.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Star,
-                            contentDescription = if (currentNote?.starred == true) {
-                                "取消加星"
-                            } else {
-                                "加星"
-                            },
-                            tint = if (currentNote?.starred == true) {
-                                Color(0xFFD19B3D)
-                            } else {
-                                EditorRule
-                            },
-                            modifier = Modifier.size(19.dp),
-                        )
-                    }
-                    Box {
-                        Row(
-                            modifier = Modifier
-                                .height(24.dp)
-                                .background(
-                                    color = Color(0xFFFFE8B2),
-                                    shape = RoundedCornerShape(3.dp),
-                                )
-                                .border(
-                                    width = 1.dp,
-                                    color = Color(0xFFE2BC62),
-                                    shape = RoundedCornerShape(3.dp),
-                                )
-                                .clickable { formatMenuOpen = true }
-                                .padding(horizontal = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = when (format) {
-                                    NoteFormat.TEXT -> "TXT"
-                                    NoteFormat.MARKDOWN -> "MD"
-                                    NoteFormat.CHECKLIST -> "待办"
-                                },
-                                color = Color(0xFFB06B1C),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = formatMenuOpen,
-                            onDismissRequest = { formatMenuOpen = false },
-                        ) {
-                            NoteFormat.entries.forEach { mode ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            when (mode) {
-                                                NoteFormat.TEXT -> "纯文本"
-                                                NoteFormat.MARKDOWN -> "Markdown"
-                                                NoteFormat.CHECKLIST -> "待办清单"
-                                            },
-                                        )
-                                    },
-                                    onClick = {
-                                        format = mode
-                                        preview = false
-                                        formatMenuOpen = false
-                                    },
-                                )
-                            }
-                        }
-                    }
-                    Text(" ▾", color = EditorRule, fontSize = 11.sp)
-                }
-
                 if (!preview) {
                     BasicTextField(
                         value = title,
@@ -738,22 +649,41 @@ fun EditorScreen(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = editorLineSpacing),
+                            .heightIn(min = editorLineSpacing)
+                            .onPreviewKeyEvent { event ->
+                                if (
+                                    event.key == Key.Enter &&
+                                    event.type == KeyEventType.KeyDown
+                                ) {
+                                    bodyFocusRequester.requestFocus()
+                                    keyboardController?.show()
+                                    true
+                                } else {
+                                    false
+                                }
+                            },
                         textStyle = TextStyle(
                             color = EditorInk,
-                            fontSize = 24.sp,
-                            lineHeight = 32.sp,
+                            fontSize = EditorTextMetrics.titleFontSize,
+                            lineHeight = EditorTextMetrics.lineHeight,
                             fontWeight = FontWeight.Bold,
                         ),
                         singleLine = false,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(
+                            onNext = {
+                                bodyFocusRequester.requestFocus()
+                                keyboardController?.show()
+                            },
+                        ),
                         cursorBrush = SolidColor(EditorInk),
                         decorationBox = { innerTextField ->
                             if (title.isBlank()) {
                                 Text(
                                     text = "标题",
                                     color = EditorMutedInk.copy(alpha = 0.55f),
-                                    fontSize = 24.sp,
-                                    lineHeight = 32.sp,
+                                    fontSize = EditorTextMetrics.titleFontSize,
+                                    lineHeight = EditorTextMetrics.lineHeight,
                                     fontWeight = FontWeight.Bold,
                                 )
                             }
@@ -769,8 +699,8 @@ fun EditorScreen(
                             Text(
                                 text = "开始记录…",
                                 color = EditorMutedInk.copy(alpha = 0.52f),
-                                fontSize = 20.sp,
-                                lineHeight = 32.sp,
+                                fontSize = EditorTextMetrics.bodyFontSize,
+                                lineHeight = EditorTextMetrics.lineHeight,
                             )
                         }
                         InlineDocumentEditor(
@@ -778,7 +708,9 @@ fun EditorScreen(
                             onValueChange = ::setBodyWithHistory,
                             controller = documentEditor,
                             textColor = EditorInk,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(bodyFocusRequester),
                         )
                     }
                     EmbeddedDocumentImages(
@@ -792,8 +724,8 @@ fun EditorScreen(
                         modifier = Modifier
                             .fillMaxWidth(),
                         color = EditorInk,
-                        fontSize = 24.sp,
-                        lineHeight = 32.sp,
+                        fontSize = EditorTextMetrics.titleFontSize,
+                        lineHeight = EditorTextMetrics.lineHeight,
                         fontWeight = FontWeight.SemiBold,
                     )
                     MarkdownPreview(
@@ -1082,6 +1014,128 @@ private fun SendPlaneGlyph(modifier: Modifier = Modifier) {
 
 private fun noteShareText(title: String, body: String): String =
     title.ifBlank { "无标题" } + "\n\n" + AttachmentReferences.plainText(body)
+
+@Composable
+private fun EditorInfoBar(
+    folderName: String,
+    updatedAt: Long,
+    characterCount: Int,
+    starred: Boolean,
+    format: NoteFormat,
+    menuExpanded: Boolean,
+    lineHeight: Dp,
+    onFolderClick: () -> Unit,
+    onStarClick: () -> Unit,
+    onMenuExpandedChange: (Boolean) -> Unit,
+    onSelectFormat: (NoteFormat) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(lineHeight)
+            .padding(start = 54.dp, end = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .height(24.dp)
+                .border(
+                    width = 1.dp,
+                    color = EditorRule,
+                    shape = RoundedCornerShape(3.dp),
+                )
+                .clickable(onClick = onFolderClick)
+                .padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("▤", color = EditorMutedInk, fontSize = 13.sp)
+            Spacer(Modifier.width(5.dp))
+            Text(
+                text = folderName,
+                modifier = Modifier.weight(1f),
+                color = EditorMutedInk,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text("▾", color = EditorMutedInk, fontSize = 11.sp)
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = editorTimestamp(updatedAt),
+            color = EditorMutedInk,
+            fontSize = 11.sp,
+            maxLines = 1,
+        )
+        Text(
+            text = " | $characterCount",
+            color = EditorMutedInk,
+            fontSize = 11.sp,
+            maxLines = 1,
+        )
+        IconButton(
+            onClick = onStarClick,
+            modifier = Modifier.size(28.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Star,
+                contentDescription = if (starred) "取消加星" else "加星",
+                tint = if (starred) Color(0xFFD19B3D) else EditorRule,
+                modifier = Modifier.size(19.dp),
+            )
+        }
+        Box {
+            Row(
+                modifier = Modifier
+                    .height(24.dp)
+                    .background(
+                        color = Color(0xFFFFE8B2),
+                        shape = RoundedCornerShape(3.dp),
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = Color(0xFFE2BC62),
+                        shape = RoundedCornerShape(3.dp),
+                    )
+                    .clickable { onMenuExpandedChange(true) }
+                    .padding(horizontal = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = when (format) {
+                        NoteFormat.TEXT -> "TXT"
+                        NoteFormat.MARKDOWN -> "MD"
+                        NoteFormat.CHECKLIST -> "待办"
+                    },
+                    color = Color(0xFFB06B1C),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { onMenuExpandedChange(false) },
+            ) {
+                NoteFormat.entries.forEach { mode ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                when (mode) {
+                                    NoteFormat.TEXT -> "纯文本"
+                                    NoteFormat.MARKDOWN -> "Markdown"
+                                    NoteFormat.CHECKLIST -> "待办清单"
+                                },
+                            )
+                        },
+                        onClick = { onSelectFormat(mode) },
+                    )
+                }
+            }
+        }
+        Text(" ▾", color = EditorRule, fontSize = 11.sp)
+    }
+}
 
 @Composable
 private fun EditorFormatToolbar(

@@ -14,7 +14,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.unit.sp
 
 @Composable
 fun InlineDocumentEditor(
@@ -41,8 +40,8 @@ fun InlineDocumentEditor(
         modifier = modifier,
         textStyle = TextStyle(
             color = textColor,
-            fontSize = 20.sp,
-            lineHeight = 32.sp,
+            fontSize = EditorTextMetrics.bodyFontSize,
+            lineHeight = EditorTextMetrics.lineHeight,
         ),
         cursorBrush = SolidColor(textColor),
         visualTransformation = controller.visualTransformation,

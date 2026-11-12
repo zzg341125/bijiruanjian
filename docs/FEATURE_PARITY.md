@@ -28,6 +28,7 @@ account services, or paid backend behavior.
 | WebDAV online backup and restore | Yes, Obsidian-style three-way sync |
 | Direct Markdown import | Yes |
 | Ruled paper editor | Yes |
+| Title-first document flow | Yes, Enter moves from the title into the body |
 | Fixed home search | Yes |
 | Undo and redo history | Yes |
 | Visible rich-text formatting toolbar | Yes, Markdown remains hidden in the editor |

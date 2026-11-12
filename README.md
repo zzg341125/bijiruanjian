@@ -17,6 +17,7 @@
 - 主页固定搜索框
 - 编辑器撤销/重做历史
 - 可视化格式工具栏：标题、居中、列表、粗体、引用和待办只显示效果，不暴露 Markdown 代码
+- 信纸编辑器以标题为第一行，回车直接进入正文；格线行高随字号同步调整
 - 顶部分类菜单：全部、加星、文件夹、回收站及实时数量
 - 置顶、加星、软删除、恢复和永久删除
 - 标题与正文搜索，本地知识检索
@@ -103,8 +104,8 @@ app/build/outputs/apk/debug/app-debug.apk
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.11.4
-git push origin v0.11.4
+git tag v0.11.5
+git push origin v0.11.5
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。

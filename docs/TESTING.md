@@ -6,7 +6,7 @@ Tested on 2026-11-12 with:
 - JDK 21
 - Gradle 8.9
 - Android Gradle Plugin 8.7.3
-- 曲阳便签 `0.11.4` (`versionCode` 11004)
+- 曲阳便签 `0.11.5` (`versionCode` 11005)
 
 ## Automated checks
 
@@ -19,7 +19,7 @@ Tested on 2026-11-12 with:
 
 Result on 2026-11-12:
 
-- 71 unit tests pass with 0 failures and 0 errors.
+- 72 unit tests pass with 0 failures and 0 errors.
 - Lint: 0 errors, 126 warnings (mostly upstream OAF deprecation notices).
 - Debug APK builds and installs.
 - Release build passes R8 minification and produces a 34.8 MB unsigned APK.
@@ -45,7 +45,7 @@ Result on 2026-11-12:
 - Nutstore Link-header pagination follows all `rel="next"` pages on the same server.
 - Remote-imported files are not uploaded again during the same sync.
 - Sync summary reports the actual number of Nutstore directory pages scanned.
-- Local APK versionCode is 11004 for version 0.11.4.
+- Local APK versionCode is 11005 for version 0.11.5.
 - WebDAV folder traversal includes nested subfolders and preserves relative Markdown paths.
 - The download-and-restore action shows the full sync result rather than a fixed success message.
 - Imported notes are written before their attachments, satisfying the SQLite foreign key.
@@ -83,6 +83,11 @@ Result on 2026-11-12:
   reopening the document in a loop.
 - Word and Excel top bars remain visible after the previous reading-mode auto-hide interval.
 - The supplied gradient note-and-pen artwork is used for legacy, adaptive and round launcher icons.
+- The document title is the first ruled-paper line; folder, date, count and format controls sit in a
+  separate fixed information strip above the paper.
+- Pressing Enter in the title moves focus into the body without adding a line break to the title.
+- Ruled-paper line spacing is derived from the configured font scale, so the rules remain aligned
+  with title and body text at 80%, 100% and 150% sizes.
 
 ## Manual smoke test
 
