@@ -6,7 +6,7 @@ Tested on 2026-11-12 with:
 - JDK 21
 - Gradle 8.9
 - Android Gradle Plugin 8.7.3
-- 曲阳便签 `0.11.7` (`versionCode` 11007)
+- 曲阳便签 `0.11.8` (`versionCode` 11008)
 
 ## Automated checks
 
@@ -45,7 +45,7 @@ Result on 2026-11-12:
 - Nutstore Link-header pagination follows all `rel="next"` pages on the same server.
 - Remote-imported files are not uploaded again during the same sync.
 - Sync summary reports the actual number of Nutstore directory pages scanned.
-- Local APK versionCode is 11007 for version 0.11.7.
+- Local APK versionCode is 11008 for version 0.11.8.
 - WebDAV folder traversal includes nested subfolders and preserves relative Markdown paths.
 - The download-and-restore action shows the full sync result rather than a fixed success message.
 - Imported notes are written before their attachments, satisfying the SQLite foreign key.
@@ -93,6 +93,10 @@ Result on 2026-11-12:
 - The home header keeps its category action on the title itself without a trailing arrow control.
 - The home search field is a compact 44dp rounded capsule.
 - Home note cards have a custom-drawn paperclip at their left edge.
+- Static APK analysis confirmed the reference list item uses a 22×56dp clip, a 10dp card
+  radius, and persistent pin/star controls in the timestamp row.
+- The clean-room Compose list now exposes only the left half of the original clip geometry and
+  keeps independent pin/star actions plus the overflow menu.
 - Horizontal ruled-paper lines are drawn inside the scrollable document layer, so title, body,
   wrapped lines and paper rules move together at every scroll position.
 

@@ -15,7 +15,8 @@
 - 普通文本、Markdown、待办三种便签模式
 - 标题、正文、标签、文件夹和自动保存
 - 主页固定搜索框
-- 首页采用圆角紧凑搜索栏、左侧回形针笔记卡片和无箭头分类标题
+- 首页采用圆角紧凑搜索栏、左侧半露回形针笔记卡片和无箭头分类标题
+- 笔记时间行常驻置顶与加星按钮，更多操作保留在右侧菜单
 - 编辑器撤销/重做历史
 - 可视化格式工具栏：标题、居中、列表、粗体、引用和待办只显示效果，不暴露 Markdown 代码
 - 信纸编辑器以标题为第一行，回车直接进入正文；格线行高随字号同步，并与文字一起滚动
@@ -105,8 +106,8 @@ app/build/outputs/apk/debug/app-debug.apk
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.11.7
-git push origin v0.11.7
+git tag v0.11.8
+git push origin v0.11.8
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。
