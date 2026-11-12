@@ -1,13 +1,13 @@
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFilter
 
 
 ROOT = Path(__file__).resolve().parents[1]
 RES = ROOT / "app" / "src" / "main" / "res"
-SOURCE = RES / "drawable-nodpi" / "ic_launcher_foreground.png"
+SOURCE = ROOT / "docs" / "quyang-icon-source.jpg"
+MASTER = RES / "drawable-nodpi" / "quyang_launcher_art.png"
 PREVIEW = ROOT / "docs" / "quyang-icon-preview.png"
-BACKGROUND = (246, 222, 174)
 LEGACY_SIZES = {
     "mdpi": 48,
     "hdpi": 72,
@@ -17,45 +17,52 @@ LEGACY_SIZES = {
 }
 
 
-def clean_transparent_rgb(
-    image: Image.Image,
-    alpha_cutoff: int = 0,
-) -> Image.Image:
-    """Keep hidden edge pixels matching the launcher background, never blue."""
-    image = image.convert("RGBA")
-    pixels = image.load()
+def crop_rounded_icon(image: Image.Image) -> Image.Image:
+    """Remove the white JPEG corners while keeping the supplied rounded artwork."""
+    image = image.convert("RGB")
+    mask = Image.new("L", image.size, 0)
+    mask_pixels = mask.load()
     for y in range(image.height):
         for x in range(image.width):
-            red, green, blue, alpha = pixels[x, y]
-            is_blue = blue > red + 20 and green > red + 10
-            if alpha <= alpha_cutoff or is_blue:
-                pixels[x, y] = (*BACKGROUND, 0)
-    return image
+            red, green, blue = image.getpixel((x, y))
+            if not (
+                min(red, green, blue) > 222
+                and max(red, green, blue) - min(red, green, blue) < 42
+            ):
+                mask_pixels[x, y] = 255
+    for corner in (
+        (0, 0),
+        (image.width - 1, 0),
+        (0, image.height - 1),
+        (image.width - 1, image.height - 1),
+    ):
+        ImageDraw.floodfill(mask, corner, 0, thresh=20)
+    mask = mask.filter(ImageFilter.GaussianBlur(0.6))
+
+    rgba = image.convert("RGBA")
+    rgba.putalpha(mask)
+    bounds = mask.getbbox()
+    if bounds is None:
+        raise RuntimeError("Could not find icon artwork")
+    cropped = rgba.crop(bounds)
+    side = max(cropped.size)
+    square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    square.alpha_composite(
+        cropped,
+        (
+            (side - cropped.width) // 2,
+            (side - cropped.height) // 2,
+        ),
+    )
+    return square.resize((1024, 1024), Image.Resampling.LANCZOS)
 
 
-def make_full_bleed(image: Image.Image) -> Image.Image:
-    image = image.convert("RGBA")
-    pixels = image.load()
-    edge_band = max(4, image.width // 24)
-    for y in range(image.height):
-        for x in range(image.width):
-            if min(x, y, image.width - 1 - x, image.height - 1 - y) > edge_band:
-                continue
-            red, green, blue, _ = pixels[x, y]
-            if red > 225 and green > 215 and blue > 185:
-                pixels[x, y] = (*BACKGROUND, 255)
-    canvas = Image.new("RGBA", image.size, (*BACKGROUND, 255))
-    canvas.alpha_composite(image)
-    return canvas.convert("RGBA")
-
-
-master = clean_transparent_rgb(Image.open(SOURCE))
-master.save(SOURCE, format="PNG", optimize=True)
+master = crop_rounded_icon(Image.open(SOURCE))
+master.save(MASTER, format="PNG", optimize=True)
 master.save(PREVIEW, format="PNG", optimize=True)
 
 for density, size in LEGACY_SIZES.items():
-    resized = master.resize((size, size), Image.Resampling.LANCZOS)
-    icon = make_full_bleed(resized)
+    icon = master.resize((size, size), Image.Resampling.LANCZOS)
     output_dir = RES / f"mipmap-{density}"
     icon.save(output_dir / "ic_launcher.png", format="PNG", optimize=True)
     icon.save(output_dir / "ic_launcher_round.png", format="PNG", optimize=True)

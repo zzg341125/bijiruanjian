@@ -30,8 +30,10 @@ account services, or paid backend behavior.
 | Ruled paper editor | Yes |
 | Fixed home search | Yes |
 | Undo and redo history | Yes |
+| Visible rich-text formatting toolbar | Yes, Markdown remains hidden in the editor |
 | Self-contained HTML export | Yes |
 | Encrypted full backup and merge import | Yes, AES-256-GCM `.qbak` |
+| Direct embedded Office opening | Yes, DOCX/XLSX notes open in OAF immediately |
 | Incoming text share | Yes |
 | App shortcuts | Yes |
 

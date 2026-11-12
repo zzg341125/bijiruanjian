@@ -1,12 +1,12 @@
 # Testing notes
 
-Tested on 2026-11-11 with:
+Tested on 2026-11-12 with:
 
 - Android emulator API 37
 - JDK 21
 - Gradle 8.9
 - Android Gradle Plugin 8.7.3
-- 曲阳便签 `0.11.2` (`versionCode` 11002)
+- 曲阳便签 `0.11.4` (`versionCode` 11004)
 
 ## Automated checks
 
@@ -17,10 +17,10 @@ Tested on 2026-11-11 with:
 ./gradlew assembleRelease
 ```
 
-Result on 2026-11-11:
+Result on 2026-11-12:
 
-- 64 unit tests pass with 0 failures and 0 errors.
-- Lint: 0 errors, 128 warnings (mostly upstream OAF deprecation and launcher-icon notices).
+- 71 unit tests pass with 0 failures and 0 errors.
+- Lint: 0 errors, 126 warnings (mostly upstream OAF deprecation notices).
 - Debug APK builds and installs.
 - Release build passes R8 minification and produces a 34.8 MB unsigned APK.
 - A debug-key-signed copy of the minified release APK installs and launches successfully.
@@ -45,7 +45,7 @@ Result on 2026-11-11:
 - Nutstore Link-header pagination follows all `rel="next"` pages on the same server.
 - Remote-imported files are not uploaded again during the same sync.
 - Sync summary reports the actual number of Nutstore directory pages scanned.
-- Local APK versionCode is 11002 for version 0.11.2.
+- Local APK versionCode is 11004 for version 0.11.4.
 - WebDAV folder traversal includes nested subfolders and preserves relative Markdown paths.
 - The download-and-restore action shows the full sync result rather than a fixed success message.
 - Imported notes are written before their attachments, satisfying the SQLite foreign key.
@@ -70,6 +70,19 @@ Result on 2026-11-11:
 - GitHub Release parsing covers version-code ordering, APK selection and digest extraction.
 - Online updates download to app cache, verify SHA-256 and signer compatibility before opening the system installer.
 - Online update downloads have no total-duration cap; connection and stalled-stream timeouts remain enforced.
+- The visible editor hides Markdown and HTML markers while preserving heading, centered, bullet,
+  bold, quote and todo styling.
+- Format toolbar actions replace the previous line format instead of stacking markers.
+- Formatting actions normalize marker sequences like the previously corrupted
+  `# <center>- **- [ ]` line into visible text with one selected format.
+- Typing inside a formatted todo continues to show the checkbox without exposing `- [ ]`.
+- Rich formatting survives leaving and reopening the note while the Markdown source remains
+  available for search, sync and export.
+- Opening a DOCX or XLSX note from the home list launches the embedded Office editor directly.
+- Returning from the Office editor leaves the user in the originating 曲阳便签 note editor without
+  reopening the document in a loop.
+- Word and Excel top bars remain visible after the previous reading-mode auto-hide interval.
+- The supplied gradient note-and-pen artwork is used for legacy, adaptive and round launcher icons.
 
 ## Manual smoke test
 

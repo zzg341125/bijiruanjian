@@ -110,6 +110,8 @@ import io.github.latticenotes.reminder.ReminderScheduler
 import io.github.latticenotes.share.ShareImage
 import io.github.latticenotes.util.AttachmentReferences
 import io.github.latticenotes.util.isImageAttachment
+import io.github.latticenotes.util.firstEmbeddedOfficeAttachment
+import io.github.latticenotes.util.isEmbeddedOfficeDocument
 import com.prempoddar.oaf.MainActivity as OafMainActivity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -157,6 +159,7 @@ fun EditorScreen(
     var tagDialog by remember { mutableStateOf(false) }
     var deleteConfirm by remember { mutableStateOf(false) }
     var attachmentToDelete by remember { mutableStateOf<AttachmentEntity?>(null) }
+    var autoOpenedOffice by remember(noteId) { mutableStateOf(false) }
     val history = remember(noteId) { EditorHistory() }
     val documentEditor = remember(noteId) { DocumentEditorController() }
     val documentScroll = remember(noteId) { ScrollState(0) }
@@ -302,9 +305,16 @@ fun EditorScreen(
     val characterCount = AttachmentReferences.plainText(body).count { !it.isWhitespace() }
     val imageAttachments = attachments.filter(AttachmentEntity::isImageAttachment)
     val fileAttachments = attachments.filterNot(AttachmentEntity::isImageAttachment)
+    val officeAttachment = fileAttachments.firstEmbeddedOfficeAttachment()
     val editorBody = AttachmentReferences.plainText(body)
     val editorLineSpacing = with(LocalDensity.current) { 32.sp.toDp() }
 
+    LaunchedEffect(noteId, officeAttachment?.id) {
+        if (!autoOpenedOffice && officeAttachment != null) {
+            autoOpenedOffice = true
+            openAttachment(context, officeAttachment)
+        }
+    }
 
     Scaffold(
         modifier = Modifier
@@ -1257,7 +1267,7 @@ private fun openAttachment(context: Context, attachment: AttachmentEntity) {
             ?.takeIf { it.isNotBlank() }
             ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
             ?: "application/octet-stream"
-        if (extension == "docx" || extension == "xlsx") {
+        if (attachment.isEmbeddedOfficeDocument()) {
             try {
                 context.startActivity(
                     Intent(context, OafMainActivity::class.java).apply {

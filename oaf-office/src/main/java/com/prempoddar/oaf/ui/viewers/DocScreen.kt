@@ -450,7 +450,7 @@ private fun DocBodyScreen(source: DocSource, loaded: LoadedDoc, onBack: () -> Un
     ViewerScaffold(
         title = (if (dirty) "• " else "") + source.name,
         subtitle = source.kind.label + " · " + "%,d words".format(words) + if (!loaded.native) " · saves as .docx" else "",
-        chrome = chrome, autoHide = !editing && !finding,
+        chrome = chrome, autoHide = false,
         onBack = { if (dirty) confirmLeave = true else onBack() },
         actions = {
             if (editing) {

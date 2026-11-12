@@ -12,7 +12,7 @@ import java.util.Base64
 
 object SingleFileExporter {
     fun appIconDataUri(context: Context): String? = runCatching {
-        val bitmap = context.getDrawable(R.drawable.ic_launcher_foreground)
+        val bitmap = context.getDrawable(R.drawable.quyang_launcher_art)
             ?.toBitmap(width = 256, height = 256)
             ?: return null
         val output = ByteArrayOutputStream()
