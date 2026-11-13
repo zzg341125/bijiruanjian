@@ -6,6 +6,7 @@ import androidx.core.graphics.drawable.toBitmap
 import io.github.latticenotes.R
 import io.github.latticenotes.data.AttachmentEntity
 import io.github.latticenotes.util.AttachmentReferences
+import io.github.latticenotes.util.displayCaption
 import io.github.latticenotes.util.isImageAttachment
 import java.io.ByteArrayOutputStream
 import java.util.Base64
@@ -34,11 +35,12 @@ object SingleFileExporter {
             return if (encoded == null) {
                 "<p class=\"missing\">附件未嵌入：${escape(attachment.name)}</p>"
             } else if (attachment.isImageAttachment()) {
+                val caption = attachment.displayCaption()
                 """
                 <figure>
                   <img src="data:${escapeAttribute(attachment.mimeType ?: "image/*")};base64,$encoded"
-                       alt="${escapeAttribute(attachment.name)}">
-                  <figcaption>${escape(attachment.name)}</figcaption>
+                       alt="${escapeAttribute(caption)}">
+                  <figcaption>${escape(caption)}</figcaption>
                 </figure>
                 """.trimIndent()
             } else {

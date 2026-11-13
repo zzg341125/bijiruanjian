@@ -18,10 +18,10 @@ account services, or paid backend behavior.
 | Pin notes | Yes |
 | Trash and restore | Yes |
 | Auto-save | Yes |
-| Image/file attachments | Yes |
+| Image/file attachments | Yes, with up to 9 embedded images, captions, crop, full-screen preview, gallery save and drag reordering |
 | Reminders | Yes |
 | Share as text | Yes |
-| Share as long image | Yes |
+| Share as long image | Yes, including embedded images and captions |
 | Application PIN lock | Yes |
 | Theme, dynamic color, font scale | Yes |
 | Markdown note files | One `note-ID.md` per note |

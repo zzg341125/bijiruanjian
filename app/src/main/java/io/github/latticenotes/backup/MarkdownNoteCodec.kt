@@ -5,6 +5,7 @@ import io.github.latticenotes.data.FolderEntity
 import io.github.latticenotes.data.NoteEntity
 import io.github.latticenotes.data.NoteFormat
 import io.github.latticenotes.util.AttachmentReferences
+import io.github.latticenotes.util.displayCaption
 import java.util.Base64
 
 object MarkdownNoteCodec {
@@ -187,7 +188,7 @@ object MarkdownNoteCodec {
         } else {
             "application/octet-stream"
         }
-        val name = attachment.name.replace("]", "\\]")
+        val name = attachment.displayCaption().replace("]", "\\]")
         val dataUrl = "data:$mime;base64,$encoded"
         return if (mime.startsWith("image/")) {
             "![$name]($dataUrl)"

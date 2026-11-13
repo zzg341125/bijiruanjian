@@ -58,6 +58,7 @@ data class AttachmentEntity(
     val name: String,
     val mimeType: String?,
     val createdAt: Long = System.currentTimeMillis(),
+    val caption: String = "",
 ) {
     @Ignore
     var embeddedData: String? = null

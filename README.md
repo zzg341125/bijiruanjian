@@ -6,9 +6,9 @@
 
 ## 截图
 
-| 分类菜单 | 信纸编辑器 |
-| --- | --- |
-| ![笔记列表](docs/screenshot-quyang-home.png) | ![信纸编辑器](docs/screenshot-quyang-editor.png) |
+| 分类菜单 | 信纸编辑器 | 图片操作 |
+| --- | --- | --- |
+| ![笔记列表](docs/screenshot-quyang-home.png) | ![信纸编辑器](docs/screenshot-quyang-editor.png) | ![图片操作](docs/screenshot-editor-image-tools.png) |
 
 ## 功能
 
@@ -24,6 +24,8 @@
 - 置顶、加星、软删除、恢复和永久删除
 - 标题与正文搜索，本地知识检索
 - 图片可直接嵌入便签正文，并随文档预览和导出
+- 每条便签最多插入 9 张图片，支持相册多选、相机拍照、说明文字、全屏预览、
+  裁剪、另存相册、拖动排序和删除
 - 任意文档附件
 - 图片附件可嵌入 Markdown 记事和单文件 HTML
 - 内置 OAF Office 编辑器，可离线打开、编辑并原位保存 docx/xlsx，不依赖 WPS 或 Microsoft 365
@@ -106,8 +108,8 @@ app/build/outputs/apk/debug/app-debug.apk
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.11.8
-git push origin v0.11.8
+git tag v0.11.9
+git push origin v0.11.9
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。

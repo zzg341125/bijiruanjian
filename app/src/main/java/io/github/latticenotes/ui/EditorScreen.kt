@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
@@ -23,7 +24,10 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,6 +47,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -68,6 +73,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -83,13 +89,19 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
@@ -110,6 +122,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
@@ -122,18 +135,23 @@ import io.github.latticenotes.data.NotesRepository
 import io.github.latticenotes.reminder.ReminderScheduler
 import io.github.latticenotes.share.ShareImage
 import io.github.latticenotes.util.AttachmentReferences
+import io.github.latticenotes.util.ImageEditing
+import io.github.latticenotes.util.displayCaption
 import io.github.latticenotes.util.isImageAttachment
 import io.github.latticenotes.util.firstEmbeddedOfficeAttachment
 import io.github.latticenotes.util.isEmbeddedOfficeDocument
 import com.prempoddar.oaf.MainActivity as OafMainActivity
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Calendar
+import kotlin.math.abs
 
 private val EditorToolbar = Color(0xFF58483C)
 private val EditorPaper = Color(0xFFFDF8EC)
@@ -172,6 +190,13 @@ fun EditorScreen(
     var tagDialog by remember { mutableStateOf(false) }
     var deleteConfirm by remember { mutableStateOf(false) }
     var attachmentToDelete by remember { mutableStateOf<AttachmentEntity?>(null) }
+    var insertImageMenuOpen by remember { mutableStateOf(false) }
+    var imagePreview by remember { mutableStateOf<AttachmentEntity?>(null) }
+    var selectedImageId by remember(noteId) { mutableStateOf<Long?>(null) }
+    var captionTarget by remember { mutableStateOf<AttachmentEntity?>(null) }
+    var cropTarget by remember { mutableStateOf<AttachmentEntity?>(null) }
+    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
+    var importingImages by remember { mutableStateOf(false) }
     var autoOpenedOffice by remember(noteId) { mutableStateOf(false) }
     val history = remember(noteId) { EditorHistory() }
     val documentEditor = remember(noteId) { DocumentEditorController() }
@@ -267,25 +292,112 @@ fun EditorScreen(
 
     BackHandler(onBack = ::goBack)
 
-    val attachmentPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenMultipleDocuments(),
-    ) { uris ->
+    val imageAttachments = ImageEditing.orderedImages(
+        body,
+        attachments.filter(AttachmentEntity::isImageAttachment),
+    )
+
+    fun importImages(uris: List<Uri>) {
+        if (uris.isEmpty() || importingImages) return
+        val remaining = (9 - imageAttachments.size).coerceAtLeast(0)
+        if (remaining == 0) {
+            Toast.makeText(context, "每条便签最多插入 9 张图片", Toast.LENGTH_SHORT).show()
+            return
+        }
+        importingImages = true
         scope.launch {
-            var insertedImages = 0
-            uris.forEach { uri ->
-                val attachment = repository.addAttachment(noteId, uri) ?: return@forEach
-                if (attachment.isImageAttachment()) {
-                    insertedImages++
+            try {
+                val references = mutableListOf<String>()
+                uris.take(remaining).forEach { uri ->
+                    val attachment = repository.addAttachment(noteId, uri) ?: return@forEach
+                    if (attachment.isImageAttachment()) {
+                        references += AttachmentReferences.imageMarkdown(
+                            attachment.id,
+                            attachment.displayCaption(),
+                        )
+                    }
                 }
-            }
-            if (insertedImages > 0) {
-                Toast.makeText(
-                    context,
-                    "已插入 $insertedImages 张图片到便签正文",
-                    Toast.LENGTH_SHORT,
-                ).show()
+                if (references.isNotEmpty()) {
+                    setBodyWithHistory(
+                        AttachmentReferences.appendAllToBody(body, references),
+                    )
+                    Toast.makeText(
+                        context,
+                        "已插入 ${references.size} 张图片到便签",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+                if (uris.size > remaining) {
+                    Toast.makeText(
+                        context,
+                        "每条便签最多插入 9 张图片",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            } finally {
+                importingImages = false
             }
         }
+    }
+
+    fun importFiles(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        scope.launch {
+            uris.forEach { uri ->
+                repository.addAttachment(noteId, uri)
+            }
+        }
+    }
+
+    LaunchedEffect(
+        loaded,
+        importingImages,
+        attachments.map { it.id },
+    ) {
+        if (!loaded || importingImages || imageAttachments.isEmpty()) return@LaunchedEffect
+        val referenced = AttachmentReferences.referencedImageIds(body)
+        val missing = imageAttachments.filterNot { it.id in referenced }
+        if (missing.isNotEmpty()) {
+            setBodyWithHistory(
+                AttachmentReferences.appendAllToBody(
+                    body,
+                    missing.map {
+                        AttachmentReferences.imageMarkdown(it.id, it.displayCaption())
+                    },
+                ),
+            )
+        }
+    }
+
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        importImages(uris)
+    }
+    val filePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        importFiles(uris)
+    }
+    val cameraPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture(),
+    ) { success ->
+        val uri = pendingCameraUri
+        pendingCameraUri = null
+        if (success && uri != null) {
+            importImages(listOf(uri))
+        }
+    }
+    fun launchCamera() {
+        val directory = File(context.cacheDir, "shared").apply { mkdirs() }
+        val file = File(directory, "camera-${System.currentTimeMillis()}.jpg")
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.files",
+            file,
+        )
+        pendingCameraUri = uri
+        cameraPicker.launch(uri)
     }
     val singleFileExporter = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/html"),
@@ -317,7 +429,6 @@ fun EditorScreen(
     ) {}
     val currentFolder = folders.firstOrNull { it.id == currentNote?.folderId }
     val characterCount = AttachmentReferences.plainText(body).count { !it.isWhitespace() }
-    val imageAttachments = attachments.filter(AttachmentEntity::isImageAttachment)
     val fileAttachments = attachments.filterNot(AttachmentEntity::isImageAttachment)
     val officeAttachment = fileAttachments.firstEmbeddedOfficeAttachment()
     val editorBody = AttachmentReferences.plainText(body)
@@ -393,10 +504,15 @@ fun EditorScreen(
                             )
                         }
                         IconButton(
-                            onClick = { attachmentPicker.launch(arrayOf("*/*")) },
+                            onClick = { insertImageMenuOpen = true },
                             modifier = Modifier.size(40.dp),
                         ) {
-                            Icon(Icons.Outlined.Add, contentDescription = "添加图片或附件")
+                            ImageToolGlyph(
+                                glyph = ImageGlyph.GALLERY,
+                                color = Color(0xFFFFF8EA),
+                                modifier = Modifier.size(24.dp),
+                                contentDescription = "插入图片",
+                            )
                         }
                         IconButton(
                             onClick = ::goBack,
@@ -548,7 +664,7 @@ fun EditorScreen(
                                     leadingIcon = { Icon(Icons.Outlined.Share, null) },
                                     onClick = {
                                         menuOpen = false
-                                        val text = title.ifBlank { "无标题" } + "\n\n" + body
+                                        val text = noteShareText(title, body)
                                         context.startActivity(
                                             Intent.createChooser(
                                                 Intent(Intent.ACTION_SEND).apply {
@@ -565,7 +681,12 @@ fun EditorScreen(
                                     leadingIcon = { Icon(Icons.Outlined.Share, null) },
                                     onClick = {
                                         menuOpen = false
-                                        ShareImage.share(context, title, body)
+                                        ShareImage.share(
+                                            context,
+                                            title,
+                                            body,
+                                            imageAttachments,
+                                        )
                                     },
                                 )
                                 DropdownMenuItem(
@@ -735,7 +856,47 @@ fun EditorScreen(
                     }
                     EmbeddedDocumentImages(
                         attachments = imageAttachments,
-                        onOpen = { openAttachment(context, it) },
+                        editable = true,
+                        selectedImageId = selectedImageId,
+                        onSelect = { attachment ->
+                            selectedImageId = if (selectedImageId == attachment.id) {
+                                null
+                            } else {
+                                attachment.id
+                            }
+                        },
+                        onPreview = { imagePreview = it },
+                        onCaption = { captionTarget = it },
+                        onCrop = { cropTarget = it },
+                        onSave = { attachment ->
+                            scope.launch {
+                                val saved = repository.saveImageToGallery(attachment)
+                                Toast.makeText(
+                                    context,
+                                    if (saved) "图片已保存到相册" else "保存图片失败",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        },
+                        onMove = { attachment, direction ->
+                            scope.launch {
+                                val reordered = ImageEditing.move(
+                                    imageAttachments,
+                                    direction,
+                                    attachment.id,
+                                )
+                                setBodyWithHistory(
+                                    AttachmentReferences.reorderReferences(
+                                        body,
+                                        reordered.map { it.id },
+                                    ),
+                                )
+                                repository.reorderAttachments(
+                                    noteId,
+                                    reordered.map { it.id },
+                                )
+                            }
+                        },
                         onDelete = { attachmentToDelete = it },
                     )
                 } else {
@@ -755,7 +916,14 @@ fun EditorScreen(
                     )
                     EmbeddedDocumentImages(
                         attachments = imageAttachments,
-                        onOpen = { openAttachment(context, it) },
+                        editable = false,
+                        selectedImageId = null,
+                        onSelect = { imagePreview = it },
+                        onPreview = { imagePreview = it },
+                        onCaption = {},
+                        onCrop = {},
+                        onSave = {},
+                        onMove = { _, _ -> },
                         onDelete = { attachmentToDelete = it },
                     )
                 }
@@ -808,7 +976,8 @@ fun EditorScreen(
                     ShareImage.share(
                         context,
                         title,
-                        AttachmentReferences.plainText(body),
+                        body,
+                        imageAttachments,
                     )
                 },
                 onSendEmail = {
@@ -917,7 +1086,21 @@ fun EditorScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        scope.launch { repository.removeAttachment(attachment) }
+                        scope.launch {
+                            if (attachment.isImageAttachment()) {
+                                val updatedBody = AttachmentReferences.removeReference(
+                                    body,
+                                    attachment.id,
+                                )
+                                if (updatedBody != body) {
+                                    setBodyWithHistory(updatedBody)
+                                }
+                                if (selectedImageId == attachment.id) {
+                                    selectedImageId = null
+                                }
+                            }
+                            repository.removeAttachment(attachment)
+                        }
                         attachmentToDelete = null
                     },
                 ) { Text("删除") }
@@ -926,6 +1109,114 @@ fun EditorScreen(
                 TextButton(onClick = { attachmentToDelete = null }) { Text("取消") }
             },
         )
+    }
+    captionTarget?.let { attachment ->
+        ImageCaptionDialog(
+            attachment = attachment,
+            onDismiss = { captionTarget = null },
+            onSave = { caption ->
+                scope.launch {
+                    repository.updateAttachmentCaption(attachment.id, noteId, caption)
+                    captionTarget = null
+                }
+            },
+        )
+    }
+    cropTarget?.let { attachment ->
+        ImageCropDialog(
+            attachment = attachment,
+            onDismiss = { cropTarget = null },
+            onCrop = { left, top, right, bottom ->
+                scope.launch {
+                    val result = repository.cropImageAttachment(
+                        attachment,
+                        left,
+                        top,
+                        right,
+                        bottom,
+                    )
+                    Toast.makeText(
+                        context,
+                        if (result == null) "裁剪失败" else "图片已裁剪",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    cropTarget = null
+                }
+            },
+        )
+    }
+    imagePreview?.let { attachment ->
+        ImageGalleryDialog(
+            attachments = imageAttachments,
+            initialAttachmentId = attachment.id,
+            onDismiss = { imagePreview = null },
+            onSave = { target ->
+                scope.launch {
+                    val saved = repository.saveImageToGallery(target)
+                    Toast.makeText(
+                        context,
+                        if (saved) "图片已保存到相册" else "保存图片失败",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            },
+        )
+    }
+
+    if (insertImageMenuOpen) {
+        ModalBottomSheet(
+            onDismissRequest = { insertImageMenuOpen = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = Color(0xFFF8F8F8),
+            contentColor = Color(0xFF333333),
+            shape = RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp),
+            dragHandle = null,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Spacer(Modifier.weight(1f))
+                    Text("请选择操作", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.weight(1f))
+                    TextButton(
+                        onClick = { insertImageMenuOpen = false },
+                        modifier = Modifier.width(64.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
+                    ) { Text("取消", color = Color(0xFF666666)) }
+                }
+                InsertImageAction(
+                    label = "从相册选取",
+                    glyph = ImageGlyph.GALLERY,
+                ) {
+                    insertImageMenuOpen = false
+                    imagePicker.launch(arrayOf("image/*"))
+                }
+                InsertImageAction(
+                    label = "拍摄照片",
+                    glyph = ImageGlyph.CAMERA,
+                ) {
+                    insertImageMenuOpen = false
+                    launchCamera()
+                }
+                TextButton(onClick = {
+                    insertImageMenuOpen = false
+                    filePicker.launch(arrayOf("*/*"))
+                }) {
+                    Text("添加其他附件", color = Color(0xFF756A5F))
+                }
+            }
+        }
     }
 }
 
@@ -1393,47 +1684,686 @@ private fun openAttachment(context: Context, attachment: AttachmentEntity) {
 }
 
 @Composable
+private fun ImageCaptionDialog(
+    attachment: AttachmentEntity,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var caption by remember(attachment.id) { mutableStateOf(attachment.caption) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("图片说明") },
+        text = {
+            TextField(
+                value = caption,
+                onValueChange = {
+                    caption = it.replace('\n', ' ').take(200)
+                },
+                label = { Text("说明文字") },
+                placeholder = { Text(attachment.name) },
+                maxLines = 2,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(caption.trim()) }) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
+}
+
+@Composable
+private fun ImageGalleryDialog(
+    attachments: List<AttachmentEntity>,
+    initialAttachmentId: Long,
+    onDismiss: () -> Unit,
+    onSave: (AttachmentEntity) -> Unit,
+) {
+    if (attachments.isEmpty()) return
+    val initialPage = attachments.indexOfFirst { it.id == initialAttachmentId }
+        .coerceAtLeast(0)
+    val pagerState = rememberPagerState(
+        initialPage = initialPage,
+        pageCount = { attachments.size },
+    )
+    val current = attachments[pagerState.currentPage.coerceIn(attachments.indices)]
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color(0xFF090807),
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                ) { page ->
+                    val attachment = attachments[page]
+                    AsyncImage(
+                        model = File(Uri.parse(attachment.uri).path.orEmpty()),
+                        contentDescription = attachment.displayCaption(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = 76.dp, bottom = 126.dp),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .height(58.dp)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            Icons.Outlined.ArrowBack,
+                            contentDescription = "关闭预览",
+                            tint = Color.White,
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = "${pagerState.currentPage + 1} / ${attachments.size}",
+                        color = Color(0xFFD9D4CC),
+                        fontSize = 14.sp,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                }
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(Color(0xCC090807))
+                        .navigationBarsPadding()
+                        .padding(horizontal = 22.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = current.displayCaption(),
+                        color = Color(0xFFF5EEE3),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(onClick = { onSave(current) }) {
+                            Text("保存图片", color = Color(0xFFFFE0AA))
+                        }
+                        TextButton(onClick = onDismiss) {
+                            Text("关闭", color = Color(0xFFE9E3D9))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImageCropDialog(
+    attachment: AttachmentEntity,
+    onDismiss: () -> Unit,
+    onCrop: (Float, Float, Float, Float) -> Unit,
+) {
+    var left by remember(attachment.id) { mutableStateOf(0.05f) }
+    var top by remember(attachment.id) { mutableStateOf(0.05f) }
+    var right by remember(attachment.id) { mutableStateOf(0.95f) }
+    var bottom by remember(attachment.id) { mutableStateOf(0.95f) }
+    var imageSize by remember(attachment.uri) {
+        mutableStateOf<Pair<Int, Int>?>(null)
+    }
+    LaunchedEffect(attachment.uri) {
+        val measuredSize = withContext(Dispatchers.IO) {
+            runCatching {
+                val path = Uri.parse(attachment.uri).path ?: return@runCatching null
+                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(path, options)
+                options.outWidth to options.outHeight
+            }.getOrNull()
+        }
+        imageSize = measuredSize
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("裁剪图片") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(190.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF171310)),
+                ) {
+                    AsyncImage(
+                        model = File(Uri.parse(attachment.uri).path.orEmpty()),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    )
+                    Canvas(Modifier.fillMaxSize()) {
+                        val dimensions = imageSize
+                        val imageWidth: Float
+                        val imageHeight: Float
+                        if (dimensions != null && dimensions.first > 0 && dimensions.second > 0) {
+                            val imageRatio = dimensions.first.toFloat() / dimensions.second
+                            val boxRatio = size.width / size.height
+                            if (boxRatio > imageRatio) {
+                                imageHeight = size.height
+                                imageWidth = imageHeight * imageRatio
+                            } else {
+                                imageWidth = size.width
+                                imageHeight = imageWidth / imageRatio
+                            }
+                        } else {
+                            imageWidth = size.width
+                            imageHeight = size.height
+                        }
+                        val imageLeft = (size.width - imageWidth) / 2f
+                        val imageTop = (size.height - imageHeight) / 2f
+                        val cropLeft = imageLeft + imageWidth * left
+                        val cropTop = imageTop + imageHeight * top
+                        val cropRight = imageLeft + imageWidth * right
+                        val cropBottom = imageTop + imageHeight * bottom
+                        val shade = Color.Black.copy(alpha = 0.5f)
+                        drawRect(shade, Offset(imageLeft, imageTop), Size(imageWidth, cropTop - imageTop))
+                        drawRect(
+                            shade,
+                            Offset(imageLeft, cropBottom),
+                            Size(imageWidth, imageTop + imageHeight - cropBottom),
+                        )
+                        drawRect(
+                            shade,
+                            Offset(imageLeft, cropTop),
+                            Size(cropLeft - imageLeft, cropBottom - cropTop),
+                        )
+                        drawRect(
+                            shade,
+                            Offset(cropRight, cropTop),
+                            Size(imageLeft + imageWidth - cropRight, cropBottom - cropTop),
+                        )
+                        drawRect(
+                            color = Color.White,
+                            topLeft = Offset(cropLeft, cropTop),
+                            size = Size(cropRight - cropLeft, cropBottom - cropTop),
+                            style = Stroke(width = 2.dp.toPx()),
+                        )
+                    }
+                }
+                CropSlider("左", left) { left = it.coerceAtMost(right - 0.05f) }
+                CropSlider("上", top) { top = it.coerceAtMost(bottom - 0.05f) }
+                CropSlider("右", right) { right = it.coerceAtLeast(left + 0.05f) }
+                CropSlider("下", bottom) { bottom = it.coerceAtLeast(top + 0.05f) }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onCrop(left, top, right, bottom) }) { Text("裁剪") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
+}
+
+@Composable
+private fun CropSlider(label: String, value: Float, onChange: (Float) -> Unit) {
+    Row(
+        modifier = Modifier.height(34.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, modifier = Modifier.width(22.dp), color = EditorMutedInk)
+        Slider(
+            value = value,
+            onValueChange = onChange,
+            modifier = Modifier
+                .weight(1f)
+                .height(34.dp),
+            valueRange = 0f..1f,
+        )
+    }
+}
+
+@Composable
+private fun InsertImageAction(
+    label: String,
+    glyph: ImageGlyph,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clickable(onClick = onClick),
+        color = Color(0xFFE5E5E5),
+        contentColor = Color(0xFF4D4D4D),
+        shape = RoundedCornerShape(3.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ImageToolGlyph(
+                glyph = glyph,
+                color = Color(0xFF5F5A55),
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = label,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+    }
+}
+
+@Composable
 private fun EmbeddedDocumentImages(
     attachments: List<AttachmentEntity>,
-    onOpen: (AttachmentEntity) -> Unit,
+    editable: Boolean,
+    selectedImageId: Long?,
+    onSelect: (AttachmentEntity) -> Unit,
+    onPreview: (AttachmentEntity) -> Unit,
+    onCaption: (AttachmentEntity) -> Unit,
+    onCrop: (AttachmentEntity) -> Unit,
+    onSave: (AttachmentEntity) -> Unit,
+    onMove: (AttachmentEntity, Int) -> Unit,
     onDelete: (AttachmentEntity) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        attachments.forEach { attachment ->
-            AsyncImage(
-                model = File(Uri.parse(attachment.uri).path.orEmpty()),
-                contentDescription = attachment.name,
+        attachments.forEachIndexed { index, attachment ->
+            val selected = editable && selectedImageId == attachment.id
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .heightIn(min = 120.dp, max = 720.dp)
-                    .padding(vertical = 8.dp),
-                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(0.9f),
-                verticalAlignment = Alignment.CenterVertically,
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(Color(0xFFF5F0E6)),
             ) {
-                Text(
-                    text = attachment.name,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = EditorMutedInk,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                TextButton(onClick = { onOpen(attachment) }) { Text("打开") }
-                IconButton(
-                    onClick = { onDelete(attachment) },
-                    modifier = Modifier.size(36.dp),
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 120.dp, max = 380.dp),
                 ) {
-                    Icon(
-                        Icons.Outlined.Close,
-                        contentDescription = "删除图片",
-                        modifier = Modifier.size(18.dp),
+                    AsyncImage(
+                        model = File(Uri.parse(attachment.uri).path.orEmpty()),
+                        contentDescription = attachment.displayCaption(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .blur(
+                                radius = if (selected) 9.dp else 0.dp,
+                                edgeTreatment = BlurredEdgeTreatment.Unbounded,
+                            )
+                            .clickable {
+                                if (editable) onSelect(attachment) else onPreview(attachment)
+                            },
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    )
+                    if (selected) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0x66FFFFFF))
+                                .clickable { onSelect(attachment) },
+                        )
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            ImageActionButton(
+                                glyph = ImageGlyph.DELETE,
+                                label = "删除图片",
+                                background = Color(0xFFC34E3A),
+                                onClick = { onDelete(attachment) },
+                            )
+                            ImageActionButton(
+                                glyph = ImageGlyph.DESCRIPTION,
+                                label = "图片描述",
+                                onClick = { onCaption(attachment) },
+                            )
+                            ImageActionButton(
+                                glyph = ImageGlyph.SAVE,
+                                label = "保存图片",
+                                onClick = { onSave(attachment) },
+                            )
+                            ImageActionButton(
+                                glyph = ImageGlyph.PREVIEW,
+                                label = "预览图片",
+                                onClick = { onPreview(attachment) },
+                            )
+                            ImageActionButton(
+                                glyph = ImageGlyph.CROP,
+                                label = "裁剪图片",
+                                enabled = ImageEditing.isCropSupported(attachment),
+                                onClick = { onCrop(attachment) },
+                            )
+                        }
+                        ImageDragHandle(
+                            attachment = attachment,
+                            canMoveUp = index > 0,
+                            canMoveDown = index < attachments.lastIndex,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(8.dp),
+                            onMove = onMove,
+                        )
+                    }
+                }
+                if (attachment.caption.isNotBlank()) {
+                    Text(
+                        text = attachment.caption,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = EditorMutedInk,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImageActionButton(
+    glyph: ImageGlyph,
+    label: String,
+    background: Color = Color(0xFF45403A),
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .size(41.dp)
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = CircleShape,
+        color = background.copy(alpha = if (enabled) 0.94f else 0.35f),
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            ImageToolGlyph(
+                glyph = glyph,
+                color = Color.White,
+                modifier = Modifier
+                    .size(21.dp)
+                    .semantics { contentDescription = label },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ImageDragHandle(
+    attachment: AttachmentEntity,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    modifier: Modifier = Modifier,
+    onMove: (AttachmentEntity, Int) -> Unit,
+) {
+    var accumulated by remember(attachment.id) { mutableStateOf(0f) }
+    Surface(
+        modifier = modifier
+            .size(42.dp)
+            .pointerInput(attachment.id, canMoveUp, canMoveDown) {
+                detectDragGestures(
+                    onDragEnd = { accumulated = 0f },
+                    onDragCancel = { accumulated = 0f },
+                ) { change, dragAmount ->
+                    change.consume()
+                    accumulated += dragAmount.y
+                    if (abs(accumulated) >= 34.dp.toPx()) {
+                        val direction = if (accumulated > 0f) 1 else -1
+                        if (
+                            (direction < 0 && canMoveUp) ||
+                            (direction > 0 && canMoveDown)
+                        ) {
+                            onMove(attachment, direction)
+                        }
+                        accumulated = 0f
+                    }
+                }
+            }
+            .semantics { contentDescription = "拖动调整图片顺序" },
+        shape = CircleShape,
+        color = Color(0xE8F8F6F2),
+        shadowElevation = 3.dp,
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            ImageToolGlyph(
+                glyph = ImageGlyph.DRAG,
+                color = Color(0xFF77716A),
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
+}
+
+private enum class ImageGlyph {
+    GALLERY,
+    CAMERA,
+    DELETE,
+    DESCRIPTION,
+    SAVE,
+    PREVIEW,
+    CROP,
+    DRAG,
+}
+
+@Composable
+private fun ImageToolGlyph(
+    glyph: ImageGlyph,
+    color: Color,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+) {
+    Canvas(
+        modifier = if (contentDescription == null) {
+            modifier
+        } else {
+            modifier.semantics { this.contentDescription = contentDescription }
+        },
+    ) {
+        val stroke = 2.1.dp.toPx()
+        val left = size.width * 0.1f
+        val top = size.height * 0.1f
+        val right = size.width * 0.9f
+        val bottom = size.height * 0.9f
+        when (glyph) {
+            ImageGlyph.GALLERY -> {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(left, top + size.height * 0.08f),
+                    size = Size(right - left, bottom - top - size.height * 0.08f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                        3.dp.toPx(),
+                        3.dp.toPx(),
+                    ),
+                    style = Stroke(width = stroke),
+                )
+                drawCircle(
+                    color = color,
+                    radius = size.minDimension * 0.07f,
+                    center = Offset(size.width * 0.69f, size.height * 0.35f),
+                    style = Stroke(width = stroke),
+                )
+                val mountain = Path().apply {
+                    moveTo(size.width * 0.2f, size.height * 0.73f)
+                    lineTo(size.width * 0.4f, size.height * 0.48f)
+                    lineTo(size.width * 0.57f, size.height * 0.69f)
+                    lineTo(size.width * 0.7f, size.height * 0.55f)
+                    lineTo(size.width * 0.84f, size.height * 0.73f)
+                }
+                drawPath(mountain, color, style = Stroke(stroke, cap = StrokeCap.Round))
+            }
+            ImageGlyph.CAMERA -> {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(left, size.height * 0.27f),
+                    size = Size(right - left, size.height * 0.56f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()),
+                    style = Stroke(width = stroke),
+                )
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(size.width * 0.32f, size.height * 0.17f),
+                    size = Size(size.width * 0.28f, size.height * 0.15f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()),
+                    style = Stroke(width = stroke),
+                )
+                drawCircle(
+                    color = color,
+                    radius = size.minDimension * 0.15f,
+                    center = center,
+                    style = Stroke(width = stroke),
+                )
+            }
+            ImageGlyph.DELETE -> drawLine(
+                color,
+                Offset(left + stroke, center.y),
+                Offset(right - stroke, center.y),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round,
+            )
+            ImageGlyph.DESCRIPTION -> {
+                val pencil = Path().apply {
+                    moveTo(size.width * 0.22f, size.height * 0.78f)
+                    lineTo(size.width * 0.3f, size.height * 0.52f)
+                    lineTo(size.width * 0.65f, size.height * 0.17f)
+                    lineTo(size.width * 0.82f, size.height * 0.34f)
+                    lineTo(size.width * 0.47f, size.height * 0.7f)
+                    close()
+                }
+                drawPath(pencil, color, style = Stroke(stroke, join = StrokeJoin.Round))
+            }
+            ImageGlyph.SAVE -> {
+                drawLine(
+                    color,
+                    Offset(center.x, top),
+                    Offset(center.x, size.height * 0.63f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color,
+                    Offset(size.width * 0.34f, size.height * 0.48f),
+                    Offset(center.x, size.height * 0.64f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color,
+                    Offset(center.x, size.height * 0.64f),
+                    Offset(size.width * 0.66f, size.height * 0.48f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color,
+                    Offset(size.width * 0.18f, size.height * 0.87f),
+                    Offset(size.width * 0.82f, size.height * 0.87f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+            }
+            ImageGlyph.PREVIEW -> {
+                drawLine(
+                    color,
+                    Offset(size.width * 0.2f, size.height * 0.2f),
+                    Offset(size.width * 0.43f, size.height * 0.43f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color,
+                    Offset(size.width * 0.17f, size.height * 0.45f),
+                    Offset(size.width * 0.17f, size.height * 0.17f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color,
+                    Offset(size.width * 0.17f, size.height * 0.17f),
+                    Offset(size.width * 0.45f, size.height * 0.17f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color,
+                    Offset(size.width * 0.8f, size.height * 0.8f),
+                    Offset(size.width * 0.57f, size.height * 0.57f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color,
+                    Offset(size.width * 0.83f, size.height * 0.55f),
+                    Offset(size.width * 0.83f, size.height * 0.83f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color,
+                    Offset(size.width * 0.83f, size.height * 0.83f),
+                    Offset(size.width * 0.55f, size.height * 0.83f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+            }
+            ImageGlyph.CROP -> {
+                drawLine(
+                    color,
+                    Offset(size.width * 0.22f, size.height * 0.12f),
+                    Offset(size.width * 0.22f, size.height * 0.78f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color,
+                    Offset(size.width * 0.12f, size.height * 0.22f),
+                    Offset(size.width * 0.86f, size.height * 0.22f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color,
+                    Offset(size.width * 0.78f, size.height * 0.22f),
+                    Offset(size.width * 0.78f, size.height * 0.88f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color,
+                    Offset(size.width * 0.22f, size.height * 0.78f),
+                    Offset(size.width * 0.88f, size.height * 0.78f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+            }
+            ImageGlyph.DRAG -> {
+                listOf(0.28f, 0.5f, 0.72f).forEach { y ->
+                    drawLine(
+                        color,
+                        Offset(left, size.height * y),
+                        Offset(right, size.height * y),
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round,
                     )
                 }
             }

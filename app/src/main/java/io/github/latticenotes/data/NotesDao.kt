@@ -104,6 +104,12 @@ interface NotesDao {
     @Insert
     suspend fun insertAttachment(attachment: AttachmentEntity): Long
 
+    @Query("UPDATE attachments SET caption = :caption WHERE id = :id")
+    suspend fun updateAttachmentCaption(id: Long, caption: String)
+
+    @Query("UPDATE attachments SET createdAt = :createdAt WHERE id = :id")
+    suspend fun updateAttachmentCreatedAt(id: Long, createdAt: Long)
+
     @Query("DELETE FROM attachments WHERE id = :id")
     suspend fun deleteAttachment(id: Long)
 }

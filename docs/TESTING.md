@@ -1,12 +1,12 @@
 # Testing notes
 
-Tested on 2026-11-12 with:
+Tested on 2026-11-13 with:
 
 - Android emulator API 37
 - JDK 21
 - Gradle 8.9
 - Android Gradle Plugin 8.7.3
-- 曲阳便签 `0.11.8` (`versionCode` 11008)
+- 曲阳便签 `0.11.9` (`versionCode` 11009)
 
 ## Automated checks
 
@@ -17,12 +17,12 @@ Tested on 2026-11-12 with:
 ./gradlew assembleRelease
 ```
 
-Result on 2026-11-12:
+Result on 2026-11-13:
 
-- 72 unit tests pass with 0 failures and 0 errors.
+- 79 unit tests pass with 0 failures and 0 errors.
 - Lint: 0 errors, 126 warnings (mostly upstream OAF deprecation notices).
 - Debug APK builds and installs.
-- Release build passes R8 minification and produces a 34.8 MB unsigned APK.
+- Release build passes R8 minification and produces a 34.7 MB unsigned APK.
 - A debug-key-signed copy of the minified release APK installs and launches successfully.
 - The minified release APK opens and edits DOCX through OAF; the edit remains after process restart.
 - Release APK includes arm64-v8a, armeabi-v7a, x86 and x86_64; minimum Android is API 29.
@@ -45,7 +45,7 @@ Result on 2026-11-12:
 - Nutstore Link-header pagination follows all `rel="next"` pages on the same server.
 - Remote-imported files are not uploaded again during the same sync.
 - Sync summary reports the actual number of Nutstore directory pages scanned.
-- Local APK versionCode is 11008 for version 0.11.8.
+- Local APK versionCode is 11009 for version 0.11.9.
 - WebDAV folder traversal includes nested subfolders and preserves relative Markdown paths.
 - The download-and-restore action shows the full sync result rather than a fixed success message.
 - Imported notes are written before their attachments, satisfying the SQLite foreign key.
@@ -97,6 +97,19 @@ Result on 2026-11-12:
   radius, and persistent pin/star controls in the timestamp row.
 - The clean-room Compose list now exposes only the left half of the original clip geometry and
   keeps independent pin/star actions plus the overflow menu.
+- The reference APK's highest-resolution launcher icon was extracted from the `640dpi` resource
+  and regenerated as the adaptive, round and legacy launcher artwork.
+- The image editor supports up to 9 embedded images, multi-image selection, camera capture,
+  two-line captions, crop boundaries, full-screen swiping preview, gallery save,
+  drag/step reordering and deletion.
+- Attachment captions and display order are persisted and included in encrypted backups.
+- Room migration 2→3 adds attachment captions without deleting existing notes or files.
+- The insertion sheet exposes “从相册选取” and “拍摄照片” directly, matching the reference flow.
+- Tapping an image enters its operation state with circular delete, description, save, preview
+  and crop controls plus a top-right drag handle.
+- Cropping uses the visible image bounds rather than letterboxed black bars.
+- Saving to the gallery preserves the original PNG/JPEG/WebP extension and byte format.
+- Long-image sharing renders embedded images and captions in their document positions.
 - Horizontal ruled-paper lines are drawn inside the scrollable document layer, so title, body,
   wrapped lines and paper rules move together at every scroll position.
 

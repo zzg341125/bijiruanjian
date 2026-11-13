@@ -46,6 +46,7 @@ object BackupManager {
                                 put("name", attachment.name)
                                 put("mimeType", attachment.mimeType)
                                 put("createdAt", attachment.createdAt)
+                                put("caption", attachment.caption)
                                 if (attachment.embeddedData != null) {
                                     put("embeddedData", attachment.embeddedData)
                                 }
@@ -97,6 +98,7 @@ object BackupManager {
                     name = item.optString("name", "attachment"),
                     mimeType = item.optString("mimeType").ifBlank { null },
                     createdAt = item.optLong("createdAt", System.currentTimeMillis()),
+                    caption = item.optString("caption"),
                 ).apply {
                     embeddedData = item.optString("embeddedData").ifBlank { null }
                 }

@@ -5,6 +5,7 @@ import io.github.latticenotes.data.AttachmentEntity
 object AttachmentReferences {
     private const val URI_PREFIX = "quyang-attachment://"
     private val referencePattern = Regex("""!\[[^\]]*]\(quyang-attachment://(\d+)\)""")
+    private val excessBlankLines = Regex("""\n{3,}""")
 
     fun imageMarkdown(attachmentId: Long, name: String): String {
         val alt = name
@@ -23,6 +24,11 @@ object AttachmentReferences {
         }
     }
 
+    fun appendAllToBody(body: String, references: List<String>): String =
+        references.fold(body) { result, reference ->
+            appendToBody(result, reference)
+        }
+
     fun referencedImageIds(body: String): Set<Long> =
         references(body)
             .map { it.attachmentId }
@@ -40,8 +46,43 @@ object AttachmentReferences {
 
     fun plainText(body: String): String =
         body.replace(referencePattern, "")
-            .replace(Regex("\\n{3,}"), "\n\n")
+            .replace(excessBlankLines, "\n\n")
             .trim()
+
+    fun removeReference(body: String, attachmentId: Long): String =
+        body.replace(
+            Regex("""!\[[^\]]*]\($URI_PREFIX${Regex.escape(attachmentId.toString())}\)"""),
+            "",
+        )
+            .replace(excessBlankLines, "\n\n")
+            .trim()
+
+    fun reorderReferences(body: String, orderedAttachmentIds: List<Long>): String {
+        val references = references(body)
+        if (references.size < 2 || orderedAttachmentIds.isEmpty()) return body
+        val referencesById = references.associateBy { it.attachmentId }
+        val requested = orderedAttachmentIds
+            .distinct()
+            .mapNotNull(referencesById::get)
+        if (requested.isEmpty()) return body
+        val ordered = (requested + references.filterNot { it.attachmentId in orderedAttachmentIds })
+            .take(references.size)
+        return buildString {
+            var cursor = 0
+            references.forEachIndexed { index, original ->
+                append(body.substring(cursor, original.range.first))
+                val replacement = ordered[index]
+                append(
+                    body.substring(
+                        replacement.range.first,
+                        replacement.range.last + 1,
+                    ),
+                )
+                cursor = original.range.last + 1
+            }
+            append(body.substring(cursor))
+        }
+    }
 
     fun imageAttachments(
         body: String,

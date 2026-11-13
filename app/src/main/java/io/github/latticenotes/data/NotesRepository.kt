@@ -1,12 +1,18 @@
 package io.github.latticenotes.data
 
 import android.content.Context
+import android.content.ContentValues
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import io.github.latticenotes.backup.DecodedMarkdownNote
 import io.github.latticenotes.backup.MarkdownNoteCodec
 import io.github.latticenotes.util.AttachmentReferences
+import io.github.latticenotes.util.ImageEditing
+import io.github.latticenotes.util.isImageAttachment
 import org.json.JSONObject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Dispatchers
@@ -188,10 +194,152 @@ class NotesRepository(
     }
 
     suspend fun removeAttachment(attachment: AttachmentEntity) {
+        val note = dao.getNote(attachment.noteId)
+        if (note != null && attachment.isImageAttachment()) {
+            val updatedBody = AttachmentReferences.removeReference(
+                note.body,
+                attachment.id,
+            )
+            if (updatedBody != note.body) {
+                dao.upsert(
+                    note.copy(
+                        body = updatedBody,
+                        updatedAt = System.currentTimeMillis(),
+                    ),
+                )
+            }
+        }
         deleteAttachmentFile(attachment.uri)
         dao.deleteAttachment(attachment.id)
         writeMarkdownMirror(attachment.noteId)
     }
+
+    suspend fun updateAttachmentCaption(
+        attachmentId: Long,
+        noteId: Long,
+        caption: String,
+    ) {
+        dao.updateAttachmentCaption(attachmentId, caption.trim())
+        writeMarkdownMirror(noteId)
+    }
+
+    suspend fun reorderAttachments(noteId: Long, orderedAttachmentIds: List<Long>) {
+        if (orderedAttachmentIds.isEmpty()) return
+        val base = System.currentTimeMillis() - orderedAttachmentIds.size
+        orderedAttachmentIds.forEachIndexed { index, attachmentId ->
+            dao.updateAttachmentCreatedAt(attachmentId, base + index)
+        }
+        val note = dao.getNote(noteId)
+        if (note != null) {
+            val reorderedBody = AttachmentReferences.reorderReferences(
+                note.body,
+                orderedAttachmentIds,
+            )
+            if (reorderedBody != note.body) {
+                dao.upsert(
+                    note.copy(
+                        body = reorderedBody,
+                        updatedAt = System.currentTimeMillis(),
+                    ),
+                )
+            }
+        }
+        writeMarkdownMirror(noteId)
+    }
+
+    suspend fun cropImageAttachment(
+        attachment: AttachmentEntity,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+    ): AttachmentEntity? = withContext(Dispatchers.IO) {
+        runCatching {
+            if (!ImageEditing.isCropSupported(attachment)) return@runCatching null
+            val uri = Uri.parse(attachment.uri)
+            if (uri.scheme != "file") return@runCatching null
+            val file = File(uri.path ?: return@runCatching null)
+            val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+                ?: return@runCatching null
+            val bounds = ImageEditing.cropBounds(
+                width = bitmap.width,
+                height = bitmap.height,
+                left = left,
+                top = top,
+                right = right,
+                bottom = bottom,
+            ) ?: run {
+                bitmap.recycle()
+                return@runCatching null
+            }
+            val cropped = Bitmap.createBitmap(
+                bitmap,
+                bounds.left,
+                bounds.top,
+                bounds.right - bounds.left,
+                bounds.bottom - bounds.top,
+            )
+            file.outputStream().use { output ->
+                val extension = file.extension.lowercase()
+                val mime = attachment.mimeType?.lowercase().orEmpty()
+                val format = when {
+                    mime == "image/png" || extension == "png" -> Bitmap.CompressFormat.PNG
+                    mime == "image/webp" || extension == "webp" -> Bitmap.CompressFormat.WEBP
+                    else -> Bitmap.CompressFormat.JPEG
+                }
+                cropped.compress(format, 92, output)
+            }
+            cropped.recycle()
+            if (cropped !== bitmap) bitmap.recycle()
+            writeMarkdownMirror(attachment.noteId)
+            attachment
+        }.getOrNull()
+    }
+
+    suspend fun saveImageToGallery(attachment: AttachmentEntity): Boolean =
+        withContext(Dispatchers.IO) {
+            val sourceUri = Uri.parse(attachment.uri)
+            if (sourceUri.scheme != "file") return@withContext false
+            val sourceFile = File(sourceUri.path ?: return@withContext false)
+            if (!sourceFile.isFile) return@withContext false
+            val extension = attachment.name.substringAfterLast('.', "")
+            val mime = attachment.mimeType
+                ?.takeIf { it.startsWith("image/") }
+                ?: MimeTypeMap.getSingleton()
+                    .getMimeTypeFromExtension(extension.lowercase())
+                ?: "image/jpeg"
+            val displayName = ImageEditing.galleryFileName(
+                attachment,
+                System.currentTimeMillis(),
+            )
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
+                put(MediaStore.Images.Media.MIME_TYPE, mime)
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/曲阳便签")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            val target = context.contentResolver.insert(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                values,
+            ) ?: return@withContext false
+            runCatching {
+                context.contentResolver.openOutputStream(target)?.use { output ->
+                    sourceFile.inputStream().use { input -> input.copyTo(output) }
+                } ?: error("无法写入相册")
+                context.contentResolver.update(
+                    target,
+                    ContentValues().apply {
+                        put(MediaStore.Images.Media.IS_PENDING, 0)
+                    },
+                    null,
+                    null,
+                )
+                true
+            }.getOrElse {
+                context.contentResolver.delete(target, null, null)
+                false
+            }
+        }
 
     suspend fun search(query: String): List<NoteEntity> =
         dao.search(query.trim(), limit = 50)
