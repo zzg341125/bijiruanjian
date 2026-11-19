@@ -1,6 +1,7 @@
 package io.github.latticenotes.ui
 
 import android.Manifest
+import androidx.annotation.DrawableRes
 import android.app.Activity
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
@@ -18,6 +19,7 @@ import android.widget.Toast
 import android.webkit.MimeTypeMap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -49,7 +51,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -91,9 +92,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.paint
@@ -205,6 +204,7 @@ fun EditorScreen(
     var cropTarget by remember { mutableStateOf<AttachmentEntity?>(null) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
     var importingImages by remember { mutableStateOf(false) }
+    var galleryPickerOpen by remember { mutableStateOf(false) }
     var autoOpenedOffice by remember(noteId) { mutableStateOf(false) }
     val history = remember(noteId) { EditorHistory() }
     val documentEditor = remember(noteId) { DocumentEditorController() }
@@ -377,10 +377,40 @@ fun EditorScreen(
         }
     }
 
-    val imagePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenMultipleDocuments(),
+    val systemImagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(9),
     ) { uris ->
         importImages(uris)
+    }
+    val galleryPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Manifest.permission.READ_MEDIA_IMAGES
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+    val galleryPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            galleryPickerOpen = true
+        } else {
+            systemImagePicker.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+            )
+        }
+    }
+    fun openGalleryPicker() {
+        val remaining = (9 - imageAttachments.size).coerceAtLeast(0)
+        if (remaining == 0) {
+            Toast.makeText(context, "每条便签最多插入 9 张图片", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (ContextCompat.checkSelfPermission(context, galleryPermission) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            galleryPickerOpen = true
+        } else {
+            galleryPermissionLauncher.launch(galleryPermission)
+        }
     }
     val filePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
@@ -594,6 +624,14 @@ fun EditorScreen(
                                         menuOpen = false
                                         keyboardController?.hide()
                                         shareSheetOpen = true
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("添加附件") },
+                                    leadingIcon = { Icon(Icons.Outlined.Add, null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        filePicker.launch(arrayOf("*/*"))
                                     },
                                 )
                                 DropdownMenuItem(
@@ -1228,56 +1266,76 @@ fun EditorScreen(
         ModalBottomSheet(
             onDismissRequest = { insertImageMenuOpen = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = Color(0xFFF8F8F8),
+            containerColor = Color(0xFFF7F7F7),
             contentColor = Color(0xFF333333),
-            shape = RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp),
+            shape = RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp),
             dragHandle = null,
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(bottom = 18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(42.dp),
+                        .height(53.dp)
+                        .padding(horizontal = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Spacer(Modifier.weight(1f))
-                    Text("请选择操作", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "请选择操作",
+                        color = Color(0xFF333333),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
                     Spacer(Modifier.weight(1f))
                     TextButton(
                         onClick = { insertImageMenuOpen = false },
-                        modifier = Modifier.width(64.dp),
+                        modifier = Modifier.width(72.dp),
                         contentPadding = PaddingValues(horizontal = 4.dp),
-                    ) { Text("取消", color = Color(0xFF666666)) }
+                    ) {
+                        Text("取消", color = Color(0xFF333333), fontSize = 15.sp)
+                    }
                 }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(Color(0xFFE2E2E2)),
+                )
+                Spacer(Modifier.height(18.dp))
                 InsertImageAction(
                     label = "从相册选取",
-                    glyph = ImageGlyph.GALLERY,
+                    modifier = Modifier.padding(horizontal = 18.dp),
                 ) {
                     insertImageMenuOpen = false
-                    imagePicker.launch(arrayOf("image/*"))
+                    openGalleryPicker()
                 }
+                Spacer(Modifier.height(18.dp))
                 InsertImageAction(
                     label = "拍摄照片",
-                    glyph = ImageGlyph.CAMERA,
+                    modifier = Modifier.padding(horizontal = 18.dp),
                 ) {
                     insertImageMenuOpen = false
                     launchCamera()
                 }
-                TextButton(onClick = {
-                    insertImageMenuOpen = false
-                    filePicker.launch(arrayOf("*/*"))
-                }) {
-                    Text("添加其他附件", color = Color(0xFF756A5F))
-                }
             }
         }
+    }
+
+    if (galleryPickerOpen) {
+        SmartisanImagePicker(
+            maxSelection = (9 - imageAttachments.size).coerceAtLeast(1),
+            onDismiss = { galleryPickerOpen = false },
+            onConfirm = { uris ->
+                galleryPickerOpen = false
+                importImages(uris)
+            },
+        )
     }
 }
 
@@ -1979,33 +2037,28 @@ private fun CropSlider(label: String, value: Float, onChange: (Float) -> Unit) {
 @Composable
 private fun InsertImageAction(
     label: String,
-    glyph: ImageGlyph,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .height(48.dp)
             .clickable(onClick = onClick),
-        color = Color(0xFFE5E5E5),
-        contentColor = Color(0xFF4D4D4D),
-        shape = RoundedCornerShape(3.dp),
+        color = Color(0xFFBABBBF),
+        contentColor = Color.White,
+        shape = RoundedCornerShape(8.dp),
+        shadowElevation = 2.dp,
     ) {
-        Row(
+        Box(
             modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
+            contentAlignment = Alignment.Center,
         ) {
-            ImageToolGlyph(
-                glyph = glyph,
-                color = Color(0xFF5F5A55),
-                modifier = Modifier.size(22.dp),
-            )
-            Spacer(Modifier.width(10.dp))
             Text(
                 text = label,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
             )
         }
     }
@@ -2026,16 +2079,13 @@ private fun EmbeddedDocumentImages(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         attachments.forEachIndexed { index, attachment ->
             val selected = editable && selectedImageId == attachment.id
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(7.dp))
-                    .background(Color(0xFFF5F0E6)),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Box(
                     modifier = Modifier
@@ -2046,65 +2096,52 @@ private fun EmbeddedDocumentImages(
                         model = File(Uri.parse(attachment.uri).path.orEmpty()),
                         contentDescription = attachment.displayCaption(),
                         modifier = Modifier
-                            .fillMaxSize()
-                            .blur(
-                                radius = if (selected) 9.dp else 0.dp,
-                                edgeTreatment = BlurredEdgeTreatment.Unbounded,
-                            )
+                            .fillMaxWidth()
+                            .heightIn(min = 120.dp, max = 380.dp)
                             .clickable {
                                 if (editable) onSelect(attachment) else onPreview(attachment)
                             },
                         contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                     )
-                    if (selected) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color(0x66FFFFFF))
-                                .clickable { onSelect(attachment) },
+                }
+                if (selected) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ImageActionButton(
+                            icon = R.drawable.smartisan_image_delete,
+                            label = "删除图片",
+                            onClick = { onDelete(attachment) },
                         )
-                        Row(
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            ImageActionButton(
-                                glyph = ImageGlyph.DELETE,
-                                label = "删除图片",
-                                background = Color(0xFFC34E3A),
-                                onClick = { onDelete(attachment) },
-                            )
-                            ImageActionButton(
-                                glyph = ImageGlyph.DESCRIPTION,
-                                label = "图片描述",
-                                onClick = { onCaption(attachment) },
-                            )
-                            ImageActionButton(
-                                glyph = ImageGlyph.SAVE,
-                                label = "保存图片",
-                                onClick = { onSave(attachment) },
-                            )
-                            ImageActionButton(
-                                glyph = ImageGlyph.PREVIEW,
-                                label = "预览图片",
-                                onClick = { onPreview(attachment) },
-                            )
-                            ImageActionButton(
-                                glyph = ImageGlyph.CROP,
-                                label = "裁剪图片",
-                                enabled = ImageEditing.isCropSupported(attachment),
-                                onClick = { onCrop(attachment) },
-                            )
-                        }
+                        ImageActionButton(
+                            icon = R.drawable.smartisan_image_caption,
+                            label = "图片描述",
+                            onClick = { onCaption(attachment) },
+                        )
+                        ImageActionButton(
+                            icon = R.drawable.smartisan_image_save,
+                            label = "保存图片",
+                            onClick = { onSave(attachment) },
+                        )
+                        ImageActionButton(
+                            icon = R.drawable.smartisan_image_preview,
+                            label = "预览图片",
+                            onClick = { onPreview(attachment) },
+                        )
+                        ImageActionButton(
+                            icon = R.drawable.smartisan_image_crop,
+                            label = "裁剪图片",
+                            enabled = ImageEditing.isCropSupported(attachment),
+                            onClick = { onCrop(attachment) },
+                        )
+                        Spacer(Modifier.weight(1f))
                         ImageDragHandle(
                             attachment = attachment,
                             canMoveUp = index > 0,
                             canMoveDown = index < attachments.lastIndex,
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(8.dp),
                             onMove = onMove,
                         )
                     }
@@ -2114,7 +2151,7 @@ private fun EmbeddedDocumentImages(
                         text = attachment.caption,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                            .padding(horizontal = 2.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.bodySmall,
                         color = EditorMutedInk,
                         maxLines = 2,
@@ -2128,29 +2165,19 @@ private fun EmbeddedDocumentImages(
 
 @Composable
 private fun ImageActionButton(
-    glyph: ImageGlyph,
+    @DrawableRes icon: Int,
     label: String,
-    background: Color = Color(0xFF45403A),
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
-    Surface(
+    Image(
+        painter = painterResource(icon),
+        contentDescription = label,
         modifier = Modifier
-            .size(41.dp)
+            .size(46.dp)
+            .alpha(if (enabled) 1f else 0.36f)
             .clickable(enabled = enabled, onClick = onClick),
-        shape = CircleShape,
-        color = background.copy(alpha = if (enabled) 0.94f else 0.35f),
-    ) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            ImageToolGlyph(
-                glyph = glyph,
-                color = Color.White,
-                modifier = Modifier
-                    .size(21.dp)
-                    .semantics { contentDescription = label },
-            )
-        }
-    }
+    )
 }
 
 @Composable
@@ -2162,9 +2189,11 @@ private fun ImageDragHandle(
     onMove: (AttachmentEntity, Int) -> Unit,
 ) {
     var accumulated by remember(attachment.id) { mutableStateOf(0f) }
-    Surface(
+    Image(
+        painter = painterResource(R.drawable.smartisan_image_drag),
+        contentDescription = "拖动调整图片顺序",
         modifier = modifier
-            .size(42.dp)
+            .size(46.dp)
             .pointerInput(attachment.id, canMoveUp, canMoveDown) {
                 detectDragGestures(
                     onDragEnd = { accumulated = 0f },
@@ -2185,18 +2214,7 @@ private fun ImageDragHandle(
                 }
             }
             .semantics { contentDescription = "拖动调整图片顺序" },
-        shape = CircleShape,
-        color = Color(0xE8F8F6F2),
-        shadowElevation = 3.dp,
-    ) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            ImageToolGlyph(
-                glyph = ImageGlyph.DRAG,
-                color = Color(0xFF77716A),
-                modifier = Modifier.size(22.dp),
-            )
-        }
-    }
+    )
 }
 
 private enum class ImageGlyph {

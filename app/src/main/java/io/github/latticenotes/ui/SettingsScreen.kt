@@ -44,7 +44,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,7 +76,6 @@ import io.github.latticenotes.update.AppUpdate
 import io.github.latticenotes.update.UpdateManager
 import io.github.latticenotes.util.PinHasher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -104,22 +102,6 @@ fun SettingsScreen(
     var importPasswordDialog by remember { mutableStateOf(false) }
     var checkingUpdate by remember { mutableStateOf(false) }
     var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
-    var syncStatus by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(Unit) {
-        OnlineSyncManager.events.collectLatest { event ->
-            syncStatus = when (event) {
-                OnlineSyncManager.SyncEvent.Started -> "正在同步…"
-                is OnlineSyncManager.SyncEvent.Finished -> {
-                    if (event.successful) {
-                        "同步成功"
-                    } else {
-                        "同步失败：${event.message}"
-                    }
-                }
-            }
-        }
-    }
 
     val exportBackupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
@@ -363,11 +345,10 @@ fun SettingsScreen(
                         subtitle = "建议先测试配置，再上传或恢复",
                         onClick = {
                             scope.launch {
-                                syncStatus = "正在检查 WebDAV 连接…"
                                 runCatching { WebDavClient(webDavConfig()).testConnection() }
-                                    .onSuccess { syncStatus = "WebDAV 连接成功" }
+                                    .onSuccess { snackbar.showSnackbar("WebDAV 连接成功") }
                                     .onFailure {
-                                        syncStatus = "连接失败：${it.message}"
+                                        snackbar.showSnackbar("连接失败：${it.message}")
                                     }
                             }
                         },
@@ -375,20 +356,15 @@ fun SettingsScreen(
                     SettingsRowDivider()
                     SettingsActionRow(
                         title = "立即同步 Markdown 记事",
-                        subtitle = syncStatus ?: "仅上传变化文件，每篇记事保存为独立 Markdown",
+                        subtitle = "仅上传变化文件，每篇记事保存为独立 Markdown",
                         onClick = {
                             scope.launch {
-                                syncStatus = "正在同步…"
                                 OnlineSyncManager.sync(
                                     repository,
                                     settings,
                                     credentialVault,
                                     force = true,
-                                ).let { result ->
-                                    if (result == null) {
-                                        syncStatus = "WebDAV 自动同步未启用"
-                                    }
-                                }
+                                )
                             }
                         },
                     )
@@ -528,17 +504,12 @@ fun SettingsScreen(
                     onClick = {
                         webDavRestoreDialog = false
                         scope.launch {
-                            syncStatus = "正在同步…"
-                            runCatching {
-                                OnlineSyncManager.sync(
-                                    repository,
-                                    settings,
-                                    credentialVault,
-                                    force = true,
-                                ) ?: error("WebDAV 自动同步未启用")
-                            }.onFailure {
-                                syncStatus = "恢复失败：${it.message}"
-                            }
+                            OnlineSyncManager.sync(
+                                repository,
+                                settings,
+                                credentialVault,
+                                force = true,
+                            )
                         }
                     },
                 ) { Text("下载并恢复") }

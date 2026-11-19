@@ -92,11 +92,8 @@ import io.github.latticenotes.data.FolderEntity
 import io.github.latticenotes.data.NoteEntity
 import io.github.latticenotes.data.NoteFormat
 import io.github.latticenotes.data.NotesRepository
-import io.github.latticenotes.data.OnlineSyncManager
 import io.github.latticenotes.util.AttachmentReferences
 import io.github.latticenotes.util.formatListTimestamp
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
@@ -160,20 +157,6 @@ fun HomeScreen(
     var moveNote by remember { mutableStateOf<NoteEntity?>(null) }
     var tagNote by remember { mutableStateOf<NoteEntity?>(null) }
     var deleteNote by remember { mutableStateOf<NoteEntity?>(null) }
-    var syncStatus by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(Unit) {
-        OnlineSyncManager.events.collectLatest { event ->
-            when (event) {
-                OnlineSyncManager.SyncEvent.Started -> syncStatus = "正在同步…"
-                is OnlineSyncManager.SyncEvent.Finished -> {
-                    syncStatus = if (event.successful) "同步成功" else "同步失败"
-                    delay(if (event.successful) 1_800 else 3_000)
-                    syncStatus = null
-                }
-            }
-        }
-    }
 
     LaunchedEffect(initialSearch) {
         if (initialSearch) {
@@ -423,14 +406,6 @@ fun HomeScreen(
                 onQueryChange = { query = it },
                 focusRequester = searchFocus,
             )
-            syncStatus?.let { status ->
-                Text(
-                    text = status,
-                    modifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 5.dp),
-                    color = Color(0x995C3C2A),
-                    fontSize = 12.sp,
-                )
-            }
 
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -449,7 +424,11 @@ fun HomeScreen(
                             bottom = 24.dp,
                         ),
                     ) {
-                        items(filtered, key = { it.id }) { note ->
+                        items(
+                            items = filtered,
+                            key = { it.id },
+                            contentType = { "note-card" },
+                        ) { note ->
                             NoteCard(
                                 note = note,
                                 trashed = view == NoteView.TRASH,
@@ -762,26 +741,26 @@ private fun HomeSearchField(
     androidx.compose.material3.Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 10.dp)
-            .height(44.dp)
-            .border(1.dp, NoteListBorder, RoundedCornerShape(24.dp)),
-        shape = RoundedCornerShape(24.dp),
+            .padding(horizontal = 12.dp, vertical = 5.dp)
+            .height(26.dp)
+            .border(1.dp, NoteListBorder, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
         color = Color(0xFFFFFCF7),
         shadowElevation = 1.dp,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 14.dp, end = 6.dp),
+                .padding(start = 12.dp, end = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 imageVector = Icons.Outlined.Search,
                 contentDescription = null,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(16.dp),
                 tint = Color(0xFFC4B8A7),
             )
-            Spacer(Modifier.width(9.dp))
+            Spacer(Modifier.width(7.dp))
             Box(Modifier.weight(1f)) {
                 BasicTextField(
                     value = query,
@@ -791,8 +770,8 @@ private fun HomeSearchField(
                         .focusRequester(focusRequester),
                     textStyle = TextStyle(
                         color = NoteListInk,
-                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
-                        lineHeight = MaterialTheme.typography.bodyMedium.lineHeight,
+                        fontSize = 13.sp,
+                        lineHeight = 17.sp,
                     ),
                     singleLine = true,
                     cursorBrush = SolidColor(NoteListInk),
@@ -802,12 +781,12 @@ private fun HomeSearchField(
             if (query.isNotEmpty()) {
                 IconButton(
                     onClick = { onQueryChange("") },
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(28.dp),
                 ) {
                     Icon(
                         Icons.Outlined.Close,
                         contentDescription = "清空",
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(14.dp),
                         tint = Color(0xFF9D9180),
                     )
                 }
@@ -832,9 +811,7 @@ private fun NoteCard(
     onShare: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val hasImage = remember(note.body) {
-        AttachmentReferences.referencedImageIds(note.body).isNotEmpty()
-    }
+    val hasImage = note.body.contains("quyang-attachment://")
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -959,84 +936,86 @@ private fun NoteCard(
                 .size(width = 29.dp, height = 76.dp),
             contentScale = ContentScale.Fit,
         )
-        DropdownMenu(
-            expanded = menuOpen,
-            onDismissRequest = { menuOpen = false },
-        ) {
-            if (trashed) {
-                DropdownMenuItem(
-                    text = { Text("恢复") },
-                    leadingIcon = { Icon(Icons.Outlined.Refresh, null) },
-                    onClick = {
-                        menuOpen = false
-                        onRestore()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("永久删除") },
-                    leadingIcon = { Icon(Icons.Outlined.Delete, null) },
-                    onClick = {
-                        menuOpen = false
-                        onDelete()
-                    },
-                )
-            } else {
-                DropdownMenuItem(
-                    text = { Text(if (note.pinned) "取消置顶" else "置顶") },
-                    leadingIcon = { Icon(Icons.Outlined.Star, null) },
-                    onClick = {
-                        menuOpen = false
-                        onTogglePin()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(if (note.starred) "取消加星" else "加星") },
-                    leadingIcon = { Icon(Icons.Outlined.Star, null) },
-                    onClick = {
-                        menuOpen = false
-                        onToggleStar()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("移动文件夹") },
-                    leadingIcon = { Icon(Icons.Outlined.List, null) },
-                    onClick = {
-                        menuOpen = false
-                        onFolder()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("标签") },
-                    leadingIcon = { Icon(Icons.Outlined.Edit, null) },
-                    onClick = {
-                        menuOpen = false
-                        onTags()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("创建副本") },
-                    leadingIcon = { Icon(Icons.Outlined.Add, null) },
-                    onClick = {
-                        menuOpen = false
-                        onDuplicate()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("分享文本") },
-                    leadingIcon = { Icon(Icons.Outlined.Share, null) },
-                    onClick = {
-                        menuOpen = false
-                        onShare()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("移到回收站") },
-                    leadingIcon = { Icon(Icons.Outlined.Delete, null) },
-                    onClick = {
-                        menuOpen = false
-                        onDelete()
-                    },
-                )
+        if (menuOpen) {
+            DropdownMenu(
+                expanded = true,
+                onDismissRequest = { menuOpen = false },
+            ) {
+                if (trashed) {
+                    DropdownMenuItem(
+                        text = { Text("恢复") },
+                        leadingIcon = { Icon(Icons.Outlined.Refresh, null) },
+                        onClick = {
+                            menuOpen = false
+                            onRestore()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("永久删除") },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, null) },
+                        onClick = {
+                            menuOpen = false
+                            onDelete()
+                        },
+                    )
+                } else {
+                    DropdownMenuItem(
+                        text = { Text(if (note.pinned) "取消置顶" else "置顶") },
+                        leadingIcon = { Icon(Icons.Outlined.Star, null) },
+                        onClick = {
+                            menuOpen = false
+                            onTogglePin()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (note.starred) "取消加星" else "加星") },
+                        leadingIcon = { Icon(Icons.Outlined.Star, null) },
+                        onClick = {
+                            menuOpen = false
+                            onToggleStar()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("移动文件夹") },
+                        leadingIcon = { Icon(Icons.Outlined.List, null) },
+                        onClick = {
+                            menuOpen = false
+                            onFolder()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("标签") },
+                        leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+                        onClick = {
+                            menuOpen = false
+                            onTags()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("创建副本") },
+                        leadingIcon = { Icon(Icons.Outlined.Add, null) },
+                        onClick = {
+                            menuOpen = false
+                            onDuplicate()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("分享文本") },
+                        leadingIcon = { Icon(Icons.Outlined.Share, null) },
+                        onClick = {
+                            menuOpen = false
+                            onShare()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("移到回收站") },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, null) },
+                        onClick = {
+                            menuOpen = false
+                            onDelete()
+                        },
+                    )
+                }
             }
         }
     }

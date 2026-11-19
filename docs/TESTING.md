@@ -6,7 +6,7 @@ Tested on 2026-11-19 with:
 - JDK 21
 - Gradle 8.9
 - Android Gradle Plugin 8.7.3
-- 曲阳便签 `0.11.12` (`versionCode` 11012)
+- 曲阳便签 `0.11.13` (`versionCode` 11013)
 
 ## Automated checks
 
@@ -20,7 +20,7 @@ Tested on 2026-11-19 with:
 Result on 2026-11-19:
 
 - 83 unit tests pass with 0 failures and 0 errors.
-- Lint: 0 errors, 128 warnings (mostly upstream OAF deprecation notices).
+- Lint: 0 errors, 127 warnings (mostly upstream OAF deprecation notices).
 - Debug APK builds and installs.
 - Release build passes R8 minification and produces a 34.9 MB unsigned APK.
 - A debug-key-signed copy of the minified release APK installs and launches successfully.
@@ -45,7 +45,7 @@ Result on 2026-11-19:
 - Nutstore Link-header pagination follows all `rel="next"` pages on the same server.
 - Remote-imported files are not uploaded again during the same sync.
 - Sync summary reports the actual number of Nutstore directory pages scanned.
-- Local APK versionCode is 11012 for version 0.11.12.
+- Local APK versionCode is 11013 for version 0.11.13.
 - WebDAV folder traversal includes nested subfolders and preserves relative Markdown paths.
 - The download-and-restore action shows the full sync result rather than a fixed success message.
 - Imported notes are written before their attachments, satisfying the SQLite foreign key.
@@ -87,9 +87,11 @@ Result on 2026-11-19:
 - Ruled-paper line spacing is derived from the configured font scale, so the rules remain aligned
   with title and body text at 80%, 100% and 150% sizes.
 - The supplied Smartisan Notes launcher artwork is used for the package launcher and round icon.
+- Launcher resources use a full-bleed adaptive icon instead of placing the artwork inside the
+  system's legacy grey icon plate.
 - The home header uses the reference wood title bar, centered category title, settings and compose
   actions without extra header menus.
-- The home search field uses the reference 44dp white capsule.
+- The home search field uses a compact 26dp white capsule.
 - Home note cards use the reference cream paper colors, 10dp radius, 52dp content inset, relative
   timestamps and persistent pin/star controls.
 - Note cards expose only the left half of the reference clip artwork and keep actions available
@@ -105,8 +107,10 @@ Result on 2026-11-19:
 - Settings uses the reference wood background with grouped light list rows.
 - Note paper colour can be selected as light, default, dark or darkest, and the editor updates
   immediately without leaving the screen.
-- Synchronization no longer opens a floating capsule; status appears inline in the note list and
-  in the WebDAV settings row.
+- Synchronization is silent: automatic and manual sync do not show floating, inline or snackbar
+  status messages.
+- The home note list avoids parsing full note bodies during scroll and only builds the long-press
+  action menu after it is opened.
 - WebDAV synchronization emits started, successful and failed status states for both automatic and
   manual synchronization.
 - The reference APK's highest-resolution `560dpi` launcher icon was copied for the installed app
@@ -114,9 +118,15 @@ Result on 2026-11-19:
 - The image editor supports up to 9 embedded images, multi-image selection, camera capture,
   two-line captions, crop boundaries, full-screen swiping preview, gallery save,
   drag/step reordering and deletion.
+- Selected images expose the reference operation row below the image, including delete,
+  description, save, preview, crop and drag-order controls.
 - Attachment captions and display order are persisted and included in encrypted backups.
 - Room migration 2→3 adds attachment captions without deleting existing notes or files.
 - The insertion sheet exposes “从相册选取” and “拍摄照片” directly, matching the reference flow.
+- The insertion sheet uses the reference title bar and two 48dp grey actions without an extra
+  attachment action.
+- Gallery selection opens a full-screen black picker with three-column thumbnails, a `0/9`
+  selection counter and the reference title/buttons.
 - Tapping an image enters its operation state with circular delete, description, save, preview
   and crop controls plus a top-right drag handle.
 - Cropping uses the visible image bounds rather than letterboxed black bars.
