@@ -8,33 +8,35 @@ import org.junit.Test
 
 class OfficeDocumentTest {
     @Test
-    fun recognizesWordAndExcelAttachmentsCaseInsensitively() {
+    fun recognizesWordExcelAndPdfAttachmentsCaseInsensitively() {
         val word = attachment("report.DOCX")
         val excel = attachment("budget.xlsx")
+        val pdf = attachment("letter.PDF")
 
-        assertTrue(word.isEmbeddedOfficeDocument())
-        assertTrue(excel.isEmbeddedOfficeDocument())
+        assertTrue(word.isEmbeddedDocument())
+        assertTrue(excel.isEmbeddedDocument())
+        assertTrue(pdf.isEmbeddedDocument())
     }
 
     @Test
-    fun selectsTheFirstEditableOfficeAttachment() {
+    fun selectsTheFirstEmbeddedDocumentAttachment() {
         val attachments = listOf(
             attachment("photo.png"),
             attachment("report.docx"),
             attachment("budget.xlsx"),
         )
 
-        assertEquals("report.docx", attachments.firstEmbeddedOfficeAttachment()?.name)
+        assertEquals("report.docx", attachments.firstEmbeddedDocumentAttachment()?.name)
     }
 
     @Test
-    fun ignoresDocumentsWithoutAnEmbeddedOfficeEditor() {
+    fun ignoresDocumentsWithoutAnEmbeddedViewer() {
         val attachments = listOf(
-            attachment("letter.pdf"),
             attachment("plain.txt"),
+            attachment("archive.zip"),
         )
 
-        assertNull(attachments.firstEmbeddedOfficeAttachment())
+        assertNull(attachments.firstEmbeddedDocumentAttachment())
     }
 
     private fun attachment(name: String) = AttachmentEntity(

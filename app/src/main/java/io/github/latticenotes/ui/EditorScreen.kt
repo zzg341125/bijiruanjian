@@ -86,6 +86,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -95,7 +96,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.paint
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -142,11 +142,12 @@ import io.github.latticenotes.data.NotesRepository
 import io.github.latticenotes.reminder.ReminderScheduler
 import io.github.latticenotes.share.ShareImage
 import io.github.latticenotes.util.AttachmentReferences
+import io.github.latticenotes.util.DocumentBodyBlock
 import io.github.latticenotes.util.ImageEditing
 import io.github.latticenotes.util.displayCaption
 import io.github.latticenotes.util.isImageAttachment
-import io.github.latticenotes.util.firstEmbeddedOfficeAttachment
-import io.github.latticenotes.util.isEmbeddedOfficeDocument
+import io.github.latticenotes.util.firstEmbeddedDocumentAttachment
+import io.github.latticenotes.util.isEmbeddedDocument
 import com.prempoddar.oaf.MainActivity as OafMainActivity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
@@ -198,6 +199,7 @@ fun EditorScreen(
     var deleteConfirm by remember { mutableStateOf(false) }
     var attachmentToDelete by remember { mutableStateOf<AttachmentEntity?>(null) }
     var insertImageMenuOpen by remember { mutableStateOf(false) }
+    var pendingImageInsertOffset by remember(noteId) { mutableStateOf<Int?>(null) }
     var imagePreview by remember { mutableStateOf<AttachmentEntity?>(null) }
     var selectedImageId by remember(noteId) { mutableStateOf<Long?>(null) }
     var captionTarget by remember { mutableStateOf<AttachmentEntity?>(null) }
@@ -207,7 +209,10 @@ fun EditorScreen(
     var galleryPickerOpen by remember { mutableStateOf(false) }
     var autoOpenedOffice by remember(noteId) { mutableStateOf(false) }
     val history = remember(noteId) { EditorHistory() }
-    val documentEditor = remember(noteId) { DocumentEditorController() }
+    var activeDocumentBlockKey by remember(noteId) { mutableStateOf<String?>(null) }
+    val documentControllers = remember(noteId) {
+        mutableMapOf<String, DocumentEditorController>()
+    }
     val bodyFocusRequester = remember(noteId) { FocusRequester() }
     val documentScroll = remember(noteId) { ScrollState(0) }
 
@@ -279,6 +284,41 @@ fun EditorScreen(
         body = value
     }
 
+    fun activeDocumentController(): DocumentEditorController? =
+        activeDocumentBlockKey?.let(documentControllers::get)
+            ?: documentControllers["text-start"]
+
+    fun currentImageInsertionOffset(): Int {
+        val block = activeDocumentBlockKey?.let { key ->
+            AttachmentReferences.documentBlocks(body).firstOrNull {
+                it.key == key && !it.isImage
+            }
+        } ?: return body.length
+        val selection = documentControllers[block.key]
+            ?.textFieldValue
+            ?.selection
+            ?.end
+            ?: block.text.length
+        return block.start + block.leadingNewlines.length +
+            selection.coerceIn(0, block.text.length)
+    }
+
+    fun replaceDocumentBlock(block: DocumentBodyBlock, editedText: String) {
+        if (block.isImage || block.text == editedText) return
+        setBodyWithHistory(
+            body.replaceRange(
+                block.start,
+                block.end,
+                block.replacementText(editedText),
+            ),
+        )
+    }
+
+    fun prepareImageInsertion() {
+        pendingImageInsertOffset = currentImageInsertionOffset()
+        insertImageMenuOpen = true
+    }
+
     fun undo() {
         if (!history.canUndo) return
         val previous = history.undo(EditorTextSnapshot(title, body)) ?: return
@@ -306,12 +346,18 @@ fun EditorScreen(
     )
 
     fun importImages(uris: List<Uri>) {
-        if (uris.isEmpty() || importingImages) return
+        if (importingImages) return
+        if (uris.isEmpty()) {
+            pendingImageInsertOffset = null
+            return
+        }
         val remaining = (9 - imageAttachments.size).coerceAtLeast(0)
         if (remaining == 0) {
+            pendingImageInsertOffset = null
             Toast.makeText(context, "每条便签最多插入 9 张图片", Toast.LENGTH_SHORT).show()
             return
         }
+        val insertionOffset = pendingImageInsertOffset ?: body.length
         importingImages = true
         scope.launch {
             try {
@@ -327,7 +373,11 @@ fun EditorScreen(
                 }
                 if (references.isNotEmpty()) {
                     setBodyWithHistory(
-                        AttachmentReferences.appendAllToBody(body, references),
+                        AttachmentReferences.insertAllAt(
+                            body,
+                            insertionOffset,
+                            references,
+                        ),
                     )
                     Toast.makeText(
                         context,
@@ -344,6 +394,7 @@ fun EditorScreen(
                 }
             } finally {
                 importingImages = false
+                pendingImageInsertOffset = null
             }
         }
     }
@@ -401,6 +452,7 @@ fun EditorScreen(
     fun openGalleryPicker() {
         val remaining = (9 - imageAttachments.size).coerceAtLeast(0)
         if (remaining == 0) {
+            pendingImageInsertOffset = null
             Toast.makeText(context, "每条便签最多插入 9 张图片", Toast.LENGTH_SHORT).show()
             return
         }
@@ -424,6 +476,8 @@ fun EditorScreen(
         pendingCameraUri = null
         if (success && uri != null) {
             importImages(listOf(uri))
+        } else {
+            pendingImageInsertOffset = null
         }
     }
     fun launchCamera() {
@@ -468,8 +522,10 @@ fun EditorScreen(
     val currentFolder = folders.firstOrNull { it.id == currentNote?.folderId }
     val characterCount = AttachmentReferences.plainText(body).count { !it.isWhitespace() }
     val fileAttachments = attachments.filterNot(AttachmentEntity::isImageAttachment)
-    val officeAttachment = fileAttachments.firstEmbeddedOfficeAttachment()
-    val editorBody = AttachmentReferences.plainText(body)
+    val officeAttachment = fileAttachments.firstEmbeddedDocumentAttachment()
+    val documentBlocks = remember(body) {
+        AttachmentReferences.documentBlocks(body)
+    }
     val editorLineSpacing = EditorTextMetrics.lineHeightDp(LocalDensity.current.fontScale)
     val paperStyle = NotePaperStyle.fromStorage(settings.notePaperStyle)
     val paper = notePaperPalette(paperStyle)
@@ -494,11 +550,7 @@ fun EditorScreen(
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
-            .imePadding()
-            .paint(
-                painter = painterResource(R.drawable.smartisan_note_background),
-                contentScale = ContentScale.FillBounds,
-            ),
+            .imePadding(),
         topBar = {
             Surface(
                 color = Color.Transparent,
@@ -531,20 +583,16 @@ fun EditorScreen(
                                         modifier = Modifier.size(25.dp),
                                     )
                                 }
-                                EditorTitleButton(
-                                    contentDescription = "撤销",
+                                EditorHistoryButton(
+                                    label = "撤销",
                                     enabled = history.canUndo,
                                     onClick = ::undo,
-                                ) {
-                                    UndoRedoGlyph(undo = true)
-                                }
-                                EditorTitleButton(
-                                    contentDescription = "重做",
+                                )
+                                EditorHistoryButton(
+                                    label = "重做",
                                     enabled = history.canRedo,
                                     onClick = ::redo,
-                                ) {
-                                    UndoRedoGlyph(undo = false)
-                                }
+                                )
                             }
                             Box(
                                 modifier = Modifier
@@ -574,7 +622,7 @@ fun EditorScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 EditorTitleButton(
                                     contentDescription = "插入图片",
-                                    onClick = { insertImageMenuOpen = true },
+                                    onClick = ::prepareImageInsertion,
                                 ) {
                                     ImageToolGlyph(
                                         glyph = ImageGlyph.GALLERY,
@@ -821,8 +869,9 @@ fun EditorScreen(
                 EditorFormatToolbar(
                     modifier = Modifier.navigationBarsPadding(),
                     onFormat = { action ->
-                        format = NoteFormat.MARKDOWN
-                        documentEditor.apply(action)
+                        if (activeDocumentController()?.apply(action) == true) {
+                            format = NoteFormat.MARKDOWN
+                        }
                     },
                 )
             }
@@ -853,10 +902,10 @@ fun EditorScreen(
                                 var y = step
                                 while (y < size.height) {
                                     drawLine(
-                                        color = paper.rule.copy(alpha = 0.72f),
+                                        color = paper.rule.copy(alpha = 0.94f),
                                         start = Offset(0f, y),
                                         end = Offset(size.width, y),
-                                        strokeWidth = 1.1f,
+                                        strokeWidth = 1.35f,
                                     )
                                     y += step
                                 }
@@ -912,74 +961,118 @@ fun EditorScreen(
                             innerTextField()
                         },
                     )
-                    Box(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 280.dp),
                     ) {
-                        if (editorBody.isBlank()) {
-                            Text(
-                                text = "开始记录…",
-                                color = paper.mutedInk.copy(alpha = 0.58f),
-                                fontSize = EditorTextMetrics.bodyFontSize,
-                                lineHeight = EditorTextMetrics.lineHeight,
-                            )
+                        val imagesById = imageAttachments.associateBy { it.id }
+                        val bodyIsBlank = AttachmentReferences.plainText(body).isBlank()
+                        documentBlocks.forEachIndexed { blockIndex, block ->
+                            key(block.key) {
+                                val imageId = block.imageId
+                                if (imageId != null) {
+                                    val attachment = imagesById[imageId]
+                                    if (attachment != null) {
+                                        val imageIndex = documentBlocks
+                                            .take(blockIndex)
+                                            .count { it.isImage }
+                                        EmbeddedDocumentImage(
+                                            attachment = attachment,
+                                            editable = true,
+                                            selected = selectedImageId == attachment.id,
+                                            canMoveUp = imageIndex > 0,
+                                            canMoveDown = imageIndex < imageAttachments.lastIndex,
+                                            onSelect = {
+                                                selectedImageId =
+                                                    if (selectedImageId == attachment.id) {
+                                                        null
+                                                    } else {
+                                                        attachment.id
+                                                    }
+                                            },
+                                            onPreview = { imagePreview = attachment },
+                                            onCaption = { captionTarget = attachment },
+                                            onCrop = { cropTarget = attachment },
+                                            onSave = {
+                                                scope.launch {
+                                                    val saved = repository
+                                                        .saveImageToGallery(attachment)
+                                                    Toast.makeText(
+                                                        context,
+                                                        if (saved) {
+                                                            "图片已保存到相册"
+                                                        } else {
+                                                            "保存图片失败"
+                                                        },
+                                                        Toast.LENGTH_SHORT,
+                                                    ).show()
+                                                }
+                                            },
+                                            onMove = { direction ->
+                                                scope.launch {
+                                                    val reordered = ImageEditing.move(
+                                                        imageAttachments,
+                                                        direction,
+                                                        attachment.id,
+                                                    )
+                                                    setBodyWithHistory(
+                                                        AttachmentReferences.reorderReferences(
+                                                            body,
+                                                            reordered.map { it.id },
+                                                        ),
+                                                    )
+                                                    repository.reorderAttachments(
+                                                        noteId,
+                                                        reordered.map { it.id },
+                                                    )
+                                                }
+                                            },
+                                            onDelete = { attachmentToDelete = attachment },
+                                        )
+                                    }
+                                } else {
+                                    val controller = documentControllers.getOrPut(block.key) {
+                                        DocumentEditorController()
+                                    }
+                                    val firstTextBlock = documentBlocks
+                                        .take(blockIndex)
+                                        .none { !it.isImage }
+                                    val editorModifier = Modifier
+                                        .fillMaxWidth()
+                                        .then(
+                                            if (firstTextBlock) {
+                                                Modifier.focusRequester(bodyFocusRequester)
+                                            } else {
+                                                Modifier
+                                            },
+                                        )
+                                    Box {
+                                        if (bodyIsBlank && firstTextBlock) {
+                                            Text(
+                                                text = "开始记录…",
+                                                color = paper.mutedInk.copy(alpha = 0.58f),
+                                                fontSize = EditorTextMetrics.bodyFontSize,
+                                                lineHeight = EditorTextMetrics.lineHeight,
+                                            )
+                                        }
+                                        InlineDocumentEditor(
+                                            value = block.text,
+                                            onValueChange = {
+                                                replaceDocumentBlock(block, it)
+                                            },
+                                            controller = controller,
+                                            textColor = paper.ink,
+                                            modifier = editorModifier,
+                                            onFocused = {
+                                                activeDocumentBlockKey = block.key
+                                            },
+                                        )
+                                    }
+                                }
+                            }
                         }
-                        InlineDocumentEditor(
-                            value = editorBody,
-                            onValueChange = ::setBodyWithHistory,
-                            controller = documentEditor,
-                            textColor = paper.ink,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(bodyFocusRequester),
-                        )
                     }
-                    EmbeddedDocumentImages(
-                        attachments = imageAttachments,
-                        editable = true,
-                        selectedImageId = selectedImageId,
-                        onSelect = { attachment ->
-                            selectedImageId = if (selectedImageId == attachment.id) {
-                                null
-                            } else {
-                                attachment.id
-                            }
-                        },
-                        onPreview = { imagePreview = it },
-                        onCaption = { captionTarget = it },
-                        onCrop = { cropTarget = it },
-                        onSave = { attachment ->
-                            scope.launch {
-                                val saved = repository.saveImageToGallery(attachment)
-                                Toast.makeText(
-                                    context,
-                                    if (saved) "图片已保存到相册" else "保存图片失败",
-                                    Toast.LENGTH_SHORT,
-                                ).show()
-                            }
-                        },
-                        onMove = { attachment, direction ->
-                            scope.launch {
-                                val reordered = ImageEditing.move(
-                                    imageAttachments,
-                                    direction,
-                                    attachment.id,
-                                )
-                                setBodyWithHistory(
-                                    AttachmentReferences.reorderReferences(
-                                        body,
-                                        reordered.map { it.id },
-                                    ),
-                                )
-                                repository.reorderAttachments(
-                                    noteId,
-                                    reordered.map { it.id },
-                                )
-                            }
-                        },
-                        onDelete = { attachmentToDelete = it },
-                    )
                 } else {
                     Text(
                         text = title.ifBlank { "无标题" },
@@ -990,30 +1083,41 @@ fun EditorScreen(
                         lineHeight = EditorTextMetrics.lineHeight,
                         fontWeight = FontWeight.SemiBold,
                     )
-                    MarkdownPreview(
-                        markdown = editorBody,
-                        modifier = Modifier
-                            .fillMaxWidth(),
-                    )
-                    EmbeddedDocumentImages(
-                        attachments = imageAttachments,
-                        editable = false,
-                        selectedImageId = null,
-                        onSelect = { imagePreview = it },
-                        onPreview = { imagePreview = it },
-                        onCaption = {},
-                        onCrop = {},
-                        onSave = {},
-                        onMove = { _, _ -> },
-                        onDelete = { attachmentToDelete = it },
-                    )
+                    val imagesById = imageAttachments.associateBy { it.id }
+                    documentBlocks.forEach { block ->
+                        val imageId = block.imageId
+                        if (imageId != null) {
+                            val attachment = imagesById[imageId]
+                            if (attachment != null) {
+                                EmbeddedDocumentImage(
+                                    attachment = attachment,
+                                    editable = false,
+                                    selected = false,
+                                    canMoveUp = false,
+                                    canMoveDown = false,
+                                    onSelect = { imagePreview = attachment },
+                                    onPreview = { imagePreview = attachment },
+                                    onCaption = {},
+                                    onCrop = {},
+                                    onSave = {},
+                                    onMove = {},
+                                    onDelete = { attachmentToDelete = attachment },
+                                )
+                            }
+                        } else if (block.text.isNotBlank()) {
+                            MarkdownPreview(
+                                markdown = block.text,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
                 }
 
                 if (fileAttachments.isNotEmpty()) {
                     AttachmentStrip(
                         attachments = fileAttachments,
                         onOpen = { attachment ->
-                            if (attachment.isEmbeddedOfficeDocument()) {
+                            if (attachment.isEmbeddedDocument()) {
                                 scope.launch {
                                     currentNote?.let {
                                         repository.save(
@@ -1473,13 +1577,27 @@ private fun EditorTitleButton(
 }
 
 @Composable
-private fun UndoRedoGlyph(undo: Boolean) {
-    Text(
-        text = if (undo) "↶" else "↷",
-        color = EditorToolbarInk,
-        fontSize = 25.sp,
-        lineHeight = 28.sp,
-    )
+private fun EditorHistoryButton(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .width(48.dp)
+            .height(38.dp),
+        contentPadding = PaddingValues(0.dp),
+    ) {
+        Text(
+            text = label,
+            color = EditorToolbarInk.copy(alpha = if (enabled) 1f else 0.48f),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+    }
 }
 
 @Composable
@@ -1736,7 +1854,7 @@ private fun openAttachment(context: Context, attachment: AttachmentEntity) {
             ?.takeIf { it.isNotBlank() }
             ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
             ?: "application/octet-stream"
-        if (attachment.isEmbeddedOfficeDocument()) {
+        if (attachment.isEmbeddedDocument()) {
             try {
                 context.startActivity(
                     Intent(context, OafMainActivity::class.java).apply {
@@ -2065,32 +2183,41 @@ private fun InsertImageAction(
 }
 
 @Composable
-private fun EmbeddedDocumentImages(
-    attachments: List<AttachmentEntity>,
+private fun EmbeddedDocumentImage(
+    attachment: AttachmentEntity,
     editable: Boolean,
-    selectedImageId: Long?,
+    selected: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
     onSelect: (AttachmentEntity) -> Unit,
     onPreview: (AttachmentEntity) -> Unit,
     onCaption: (AttachmentEntity) -> Unit,
     onCrop: (AttachmentEntity) -> Unit,
     onSave: (AttachmentEntity) -> Unit,
-    onMove: (AttachmentEntity, Int) -> Unit,
+    onMove: (Int) -> Unit,
     onDelete: (AttachmentEntity) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        attachments.forEachIndexed { index, attachment ->
-            val selected = editable && selectedImageId == attachment.id
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 2.dp, vertical = 10.dp),
+            shape = RoundedCornerShape(7.dp),
+            color = Color(0xFFFFFEFB),
+            shadowElevation = 4.dp,
+        ) {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.padding(5.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 120.dp, max = 380.dp),
+                        .heightIn(min = 120.dp, max = 380.dp)
+                        .clip(RoundedCornerShape(3.dp)),
                 ) {
                     AsyncImage(
                         model = File(Uri.parse(attachment.uri).path.orEmpty()),
@@ -2104,60 +2231,60 @@ private fun EmbeddedDocumentImages(
                         contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                     )
                 }
-                if (selected) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ImageActionButton(
-                            icon = R.drawable.smartisan_image_delete,
-                            label = "删除图片",
-                            onClick = { onDelete(attachment) },
-                        )
-                        ImageActionButton(
-                            icon = R.drawable.smartisan_image_caption,
-                            label = "图片描述",
-                            onClick = { onCaption(attachment) },
-                        )
-                        ImageActionButton(
-                            icon = R.drawable.smartisan_image_save,
-                            label = "保存图片",
-                            onClick = { onSave(attachment) },
-                        )
-                        ImageActionButton(
-                            icon = R.drawable.smartisan_image_preview,
-                            label = "预览图片",
-                            onClick = { onPreview(attachment) },
-                        )
-                        ImageActionButton(
-                            icon = R.drawable.smartisan_image_crop,
-                            label = "裁剪图片",
-                            enabled = ImageEditing.isCropSupported(attachment),
-                            onClick = { onCrop(attachment) },
-                        )
-                        Spacer(Modifier.weight(1f))
-                        ImageDragHandle(
-                            attachment = attachment,
-                            canMoveUp = index > 0,
-                            canMoveDown = index < attachments.lastIndex,
-                            onMove = onMove,
-                        )
-                    }
-                }
                 if (attachment.caption.isNotBlank()) {
                     Text(
                         text = attachment.caption,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 2.dp, vertical = 6.dp),
+                            .padding(horizontal = 5.dp, vertical = 7.dp),
                         style = MaterialTheme.typography.bodySmall,
                         color = EditorMutedInk,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+        }
+        if (editable && selected) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 1.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ImageActionButton(
+                    icon = R.drawable.smartisan_image_delete,
+                    label = "删除图片",
+                    onClick = { onDelete(attachment) },
+                )
+                ImageActionButton(
+                    icon = R.drawable.smartisan_image_caption,
+                    label = "图片描述",
+                    onClick = { onCaption(attachment) },
+                )
+                ImageActionButton(
+                    icon = R.drawable.smartisan_image_save,
+                    label = "保存图片",
+                    onClick = { onSave(attachment) },
+                )
+                ImageActionButton(
+                    icon = R.drawable.smartisan_image_preview,
+                    label = "预览图片",
+                    onClick = { onPreview(attachment) },
+                )
+                ImageActionButton(
+                    icon = R.drawable.smartisan_image_crop,
+                    label = "裁剪图片",
+                    enabled = ImageEditing.isCropSupported(attachment),
+                    onClick = { onCrop(attachment) },
+                )
+                Spacer(Modifier.weight(1f))
+                ImageDragHandle(
+                    attachment = attachment,
+                    canMoveUp = canMoveUp,
+                    canMoveDown = canMoveDown,
+                    onMove = { _, direction -> onMove(direction) },
+                )
             }
         }
     }

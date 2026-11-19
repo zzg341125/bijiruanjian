@@ -1,12 +1,12 @@
 # Testing notes
 
-Tested on 2026-11-19 with:
+Tested on 2026-11-20 with:
 
 - Android emulator API 37
 - JDK 21
 - Gradle 8.9
 - Android Gradle Plugin 8.7.3
-- 曲阳便签 `0.11.13` (`versionCode` 11013)
+- 曲阳便签 `0.11.14` (`versionCode` 11014)
 
 ## Automated checks
 
@@ -19,7 +19,7 @@ Tested on 2026-11-19 with:
 
 Result on 2026-11-19:
 
-- 83 unit tests pass with 0 failures and 0 errors.
+- 91 unit tests pass with 0 failures and 0 errors.
 - Lint: 0 errors, 127 warnings (mostly upstream OAF deprecation notices).
 - Debug APK builds and installs.
 - Release build passes R8 minification and produces a 34.9 MB unsigned APK.
@@ -45,7 +45,7 @@ Result on 2026-11-19:
 - Nutstore Link-header pagination follows all `rel="next"` pages on the same server.
 - Remote-imported files are not uploaded again during the same sync.
 - Sync summary reports the actual number of Nutstore directory pages scanned.
-- Local APK versionCode is 11013 for version 0.11.13.
+- Local APK versionCode is 11014 for version 0.11.14.
 - WebDAV folder traversal includes nested subfolders and preserves relative Markdown paths.
 - The download-and-restore action shows the full sync result rather than a fixed success message.
 - Imported notes are written before their attachments, satisfying the SQLite foreign key.
@@ -109,8 +109,15 @@ Result on 2026-11-19:
   immediately without leaving the screen.
 - Synchronization is silent: automatic and manual sync do not show floating, inline or snackbar
   status messages.
-- The home note list avoids parsing full note bodies during scroll and only builds the long-press
-  action menu after it is opened.
+- The home note list prepares timestamps and image indicators once per data change, defers
+  long-press menus until opened, and draws each paper card without per-card shadow layers.
+- Settings groups use direct canvas drawing instead of clipped shadow surfaces.
+- The wooden background is installed as the window background so scrolling does not repaint the
+  full image in Compose.
+- Home cards draw their paper, margin, divider and border without creating paths or clips on
+  every frame.
+- The editor title bar keeps always-visible “撤销” and “重做” text buttons.
+- Undo becomes enabled after editing, restores the previous title/body, and enables redo.
 - WebDAV synchronization emits started, successful and failed status states for both automatic and
   manual synchronization.
 - The reference APK's highest-resolution `560dpi` launcher icon was copied for the installed app
@@ -118,6 +125,12 @@ Result on 2026-11-19:
 - The image editor supports up to 9 embedded images, multi-image selection, camera capture,
   two-line captions, crop boundaries, full-screen swiping preview, gallery save,
   drag/step reordering and deletion.
+- Inserting an image captures the active body cursor and splits the document at that position,
+  so text remains before and after the image in document order.
+- Embedded images render as white floating paper cards with rounded corners and a soft shadow
+  above the ruled lines, matching the reference image treatment.
+- Ruled-paper horizontal lines use higher contrast and a slightly stronger stroke for better
+  separation while editing.
 - Selected images expose the reference operation row below the image, including delete,
   description, save, preview, crop and drag-order controls.
 - Attachment captions and display order are persisted and included in encrypted backups.
@@ -144,6 +157,11 @@ Result on 2026-11-19:
 - Fixed home search box.
 - Editor undo and redo.
 - Direct multi-file Markdown import.
+- Unified file import converts Markdown/TXT into notes and stores DOCX, XLSX, PDF and image
+  files as attachment notes.
+- Imported PDF and DOCX files open in the embedded OAF viewers.
+- Imported binary files are registered for WebDAV sync without creating redundant Markdown
+  mirrors.
 - WebDAV configuration, connection test, Markdown upload, restore, and foreground sync.
 - Nutstore root URL uses the dedicated subfolder and never appends it twice.
 - Delete confirmation for notes, folders, and attachments.

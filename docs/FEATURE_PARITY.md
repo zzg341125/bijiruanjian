@@ -28,7 +28,7 @@ account services or paid backend behavior.
 | Theme, dynamic color, font scale | Yes |
 | Markdown note files | One `note-ID.md` per note |
 | WebDAV online backup and restore | Yes, Obsidian-style three-way sync |
-| Direct Markdown import | Yes |
+| Direct file import | Yes, including Markdown, TXT, DOCX, XLSX, PDF and images |
 | Ruled paper editor | Yes, rules scroll with document content |
 | Title-first document flow | Yes, Enter moves from the title into the body |
 | Fixed home search | Yes |
@@ -56,5 +56,4 @@ account services or paid backend behavior.
 
 - Optional user-configured AI provider.
 - Home-screen widget.
-- PDF and DOCX import.
 - Manual drag ordering.

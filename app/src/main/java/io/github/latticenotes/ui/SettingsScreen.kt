@@ -50,8 +50,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.paint
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -120,12 +122,12 @@ fun SettingsScreen(
         }
     }
 
-    val markdownLauncher = rememberLauncherForActivityResult(
+    val fileLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
         scope.launch {
-            val count = uris.mapNotNull { repository.importMarkdown(it) }.size
-            snackbar.showSnackbar("已导入 $count 个 Markdown 文件")
+            val result = repository.importFiles(uris)
+            snackbar.showSnackbar(result.summaryMessage())
         }
     }
     fun webDavConfig(): WebDavConfig = WebDavConfig(
@@ -136,11 +138,7 @@ fun SettingsScreen(
 
     Scaffold(
         modifier = Modifier
-            .fillMaxSize()
-            .paint(
-                painter = painterResource(R.drawable.smartisan_note_background),
-                contentScale = ContentScale.FillBounds,
-            ),
+            .fillMaxSize(),
         containerColor = Color.Transparent,
         topBar = {
             SmartisanSettingsTitleBar(onBack)
@@ -236,17 +234,10 @@ fun SettingsScreen(
                     )
                     SettingsRowDivider()
                     SettingsActionRow(
-                        title = "导入 Markdown 文件",
-                        subtitle = "可一次选择多个 .md 文件，文件名作为标题",
+                        title = "导入文件",
+                        subtitle = "Markdown/TXT 转为记事；DOCX、XLSX、PDF 等保存为可打开附件",
                         onClick = {
-                        markdownLauncher.launch(
-                            arrayOf(
-                                "text/markdown",
-                                "text/x-markdown",
-                                "text/plain",
-                                "application/octet-stream",
-                            ),
-                        )
+                            fileLauncher.launch(arrayOf("*/*"))
                         },
                     )
                     SettingsRowDivider()
@@ -682,11 +673,19 @@ private fun SettingsSectionTitle(title: String) {
 
 @Composable
 private fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = SettingsRowColor,
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
-        shadowElevation = 1.dp,
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .drawBehind {
+                val radius = 10.dp.toPx()
+                val corner = CornerRadius(radius, radius)
+                drawRoundRect(color = SettingsRowColor, cornerRadius = corner)
+                drawRoundRect(
+                    color = Color(0xFFE6E2DC),
+                    cornerRadius = corner,
+                    style = Stroke(width = 0.7.dp.toPx()),
+                )
+            },
     ) {
         Column(content = content)
     }

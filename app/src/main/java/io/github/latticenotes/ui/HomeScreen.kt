@@ -71,10 +71,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.paint
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -121,6 +123,12 @@ private val NoteListDivider = Color(0xFFE4D9CA)
 private val NoteListBorder = Color(0xFFE9E0D3)
 private val NoteListBarInk = Color(0xFFFFFCF7)
 
+private data class NoteRowUi(
+    val note: NoteEntity,
+    val displayTime: String,
+    val hasImage: Boolean,
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -136,12 +144,12 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     val notes by repository.observeNotes().collectAsStateWithLifecycle(emptyList())
     val folders by repository.observeFolders().collectAsStateWithLifecycle(emptyList())
-    val markdownPicker = rememberLauncherForActivityResult(
+    val filePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
         scope.launch {
-            val count = uris.mapNotNull { repository.importMarkdown(it) }.size
-            Toast.makeText(context, "已导入 $count 个 Markdown 文件", Toast.LENGTH_SHORT).show()
+            val result = repository.importFiles(uris)
+            Toast.makeText(context, result.summaryMessage(), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -207,14 +215,20 @@ fun HomeScreen(
         NoteView.TRASH -> "回收站"
         NoteView.FOLDER -> selectedFolder?.name ?: "文件夹"
     }
+    val visibleRows = remember(filtered) {
+        val now = System.currentTimeMillis()
+        filtered.map { note ->
+            NoteRowUi(
+                note = note,
+                displayTime = formatListTimestamp(note.updatedAt, now = now),
+                hasImage = note.body.contains("quyang-attachment://"),
+            )
+        }
+    }
 
     Scaffold(
         modifier = Modifier
-            .fillMaxSize()
-            .paint(
-                painter = painterResource(R.drawable.smartisan_note_background),
-                contentScale = ContentScale.FillBounds,
-            ),
+            .fillMaxSize(),
         containerColor = Color.Transparent,
         topBar = {
             Box(Modifier.fillMaxWidth()) {
@@ -343,18 +357,11 @@ fun HomeScreen(
                                     },
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("导入 Markdown") },
+                                    text = { Text("导入文件") },
                                     leadingIcon = { Icon(Icons.Outlined.Add, null) },
                                     onClick = {
                                         categoryMenuOpen = false
-                                        markdownPicker.launch(
-                                            arrayOf(
-                                                "text/markdown",
-                                                "text/x-markdown",
-                                                "text/plain",
-                                                "application/octet-stream",
-                                            ),
-                                        )
+                                        filePicker.launch(arrayOf("*/*"))
                                     },
                                 )
                                 DropdownMenuItem(
@@ -410,7 +417,7 @@ fun HomeScreen(
             Box(
                 modifier = Modifier.fillMaxSize(),
             ) {
-                if (filtered.isEmpty()) {
+                if (visibleRows.isEmpty()) {
                     EmptyNotes(
                         isSearching = query.isNotBlank(),
                         isTrash = view == NoteView.TRASH,
@@ -425,12 +432,15 @@ fun HomeScreen(
                         ),
                     ) {
                         items(
-                            items = filtered,
-                            key = { it.id },
+                            items = visibleRows,
+                            key = { it.note.id },
                             contentType = { "note-card" },
-                        ) { note ->
+                        ) { row ->
+                            val note = row.note
                             NoteCard(
                                 note = note,
+                                displayTime = row.displayTime,
+                                hasImage = row.hasImage,
                                 trashed = view == NoteView.TRASH,
                                 onClick = {
                                     if (view == NoteView.TRASH) {
@@ -799,6 +809,8 @@ private fun HomeSearchField(
 @Composable
 private fun NoteCard(
     note: NoteEntity,
+    displayTime: String,
+    hasImage: Boolean,
     trashed: Boolean,
     onClick: () -> Unit,
     onTogglePin: () -> Unit,
@@ -811,121 +823,120 @@ private fun NoteCard(
     onShare: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val hasImage = note.body.contains("quyang-attachment://")
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 78.dp),
     ) {
-        Surface(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp)
                 .heightIn(min = 78.dp)
-                .border(
-                    width = 0.7.dp,
-                    color = NoteListBorder,
-                    shape = RoundedCornerShape(10.dp),
-                )
+                .drawBehind {
+                    val radius = 10.dp.toPx()
+                    val corner = CornerRadius(radius, radius)
+                    val dividerX = 38.dp.toPx()
+                    drawRoundRect(color = NoteListCard, cornerRadius = corner)
+                    drawRoundRect(
+                        color = NoteListCardMargin,
+                        size = Size(dividerX, size.height),
+                        cornerRadius = corner,
+                    )
+                    drawRect(
+                        color = NoteListCardMargin,
+                        topLeft = Offset(radius, 0f),
+                        size = Size((dividerX - radius).coerceAtLeast(0f), size.height),
+                    )
+                    drawLine(
+                        color = NoteListDivider,
+                        start = Offset(dividerX, 0f),
+                        end = Offset(dividerX, size.height),
+                        strokeWidth = 1.dp.toPx(),
+                    )
+                    drawRoundRect(
+                        color = NoteListBorder,
+                        cornerRadius = corner,
+                        style = Stroke(width = 0.7.dp.toPx()),
+                    )
+                }
                 .combinedClickable(
                     onClick = onClick,
                     onLongClick = { menuOpen = true },
                 ),
-            shape = RoundedCornerShape(10.dp),
-            color = Color.Transparent,
-            shadowElevation = 1.dp,
         ) {
-            Box(
+            Text(
+                text = displayTime,
                 modifier = Modifier
-                    .fillMaxSize()
-                    .drawBehind {
-                        drawRect(NoteListCard)
-                        val dividerX = 38.dp.toPx()
-                        drawRect(
-                            color = NoteListCardMargin,
-                            size = androidx.compose.ui.geometry.Size(dividerX, size.height),
-                        )
-                        drawLine(
-                            color = NoteListDivider,
-                            start = Offset(dividerX, 0f),
-                            end = Offset(dividerX, size.height),
-                            strokeWidth = 1.dp.toPx(),
-                        )
-                    },
+                    .align(Alignment.TopStart)
+                    .padding(start = 52.dp, top = 8.dp, end = 84.dp),
+                color = NoteListTimeInk,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = formatListTimestamp(note.updatedAt),
+                Image(
+                    painter = painterResource(
+                        if (note.pinned) {
+                            R.drawable.smartisan_pin_checked
+                        } else {
+                            R.drawable.smartisan_pin_normal
+                        },
+                    ),
+                    contentDescription = if (note.pinned) "取消置顶" else "置顶",
                     modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(start = 52.dp, top = 8.dp, end = 84.dp),
-                    color = NoteListTimeInk,
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                        .size(width = 32.dp, height = 38.5.dp)
+                        .clickable(onClick = onTogglePin),
+                    contentScale = ContentScale.Fit,
                 )
-                Row(
+                Image(
+                    painter = painterResource(
+                        if (note.starred) {
+                            R.drawable.smartisan_star_checked
+                        } else {
+                            R.drawable.smartisan_star_normal
+                        },
+                    ),
+                    contentDescription = if (note.starred) "取消加星" else "加星",
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(end = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Image(
-                        painter = painterResource(
-                            if (note.pinned) {
-                                R.drawable.smartisan_pin_checked
-                            } else {
-                                R.drawable.smartisan_pin_normal
-                            },
-                        ),
-                        contentDescription = if (note.pinned) "取消置顶" else "置顶",
-                        modifier = Modifier
-                            .size(width = 32.dp, height = 38.5.dp)
-                            .clickable(onClick = onTogglePin),
-                        contentScale = ContentScale.Fit,
-                    )
-                    Image(
-                        painter = painterResource(
-                            if (note.starred) {
-                                R.drawable.smartisan_star_checked
-                            } else {
-                                R.drawable.smartisan_star_normal
-                            },
-                        ),
-                        contentDescription = if (note.starred) "取消加星" else "加星",
-                        modifier = Modifier
-                            .size(width = 32.dp, height = 38.5.dp)
-                            .clickable(onClick = onToggleStar),
-                        contentScale = ContentScale.Fit,
-                    )
-                }
-                Text(
-                    text = note.title.ifBlank { "无标题" },
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(
-                            start = 52.dp,
-                            top = 38.5.dp,
-                            end = if (hasImage) 38.dp else 18.dp,
-                        ),
-                    color = NoteListInk,
-                    fontSize = 16.5.sp,
-                    lineHeight = 22.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                        .size(width = 32.dp, height = 38.5.dp)
+                        .clickable(onClick = onToggleStar),
+                    contentScale = ContentScale.Fit,
                 )
-                if (hasImage) {
-                    Image(
-                        painter = painterResource(R.drawable.smartisan_image_indicator),
-                        contentDescription = "包含图片",
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(end = 15.dp, bottom = 8.dp)
-                            .size(width = 24.dp, height = 28.dp),
-                        contentScale = ContentScale.Fit,
-                    )
-                }
+            }
+            Text(
+                text = note.title.ifBlank { "无标题" },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(
+                        start = 52.dp,
+                        top = 38.5.dp,
+                        end = if (hasImage) 38.dp else 18.dp,
+                    ),
+                color = NoteListInk,
+                fontSize = 16.5.sp,
+                lineHeight = 22.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (hasImage) {
+                Image(
+                    painter = painterResource(R.drawable.smartisan_image_indicator),
+                    contentDescription = "包含图片",
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 15.dp, bottom = 8.dp)
+                        .size(width = 24.dp, height = 28.dp),
+                    contentScale = ContentScale.Fit,
+                )
             }
         }
         Image(

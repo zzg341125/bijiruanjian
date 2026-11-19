@@ -36,6 +36,7 @@ fun InlineDocumentEditor(
     controller: DocumentEditorController,
     textColor: Color,
     modifier: Modifier = Modifier,
+    onFocused: () -> Unit = {},
 ) {
     val currentOnValueChange by rememberUpdatedState(onValueChange)
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
@@ -78,7 +79,10 @@ fun InlineDocumentEditor(
         },
         modifier = modifier
             .bringIntoViewRequester(bringIntoViewRequester)
-            .onFocusChanged { focused = it.isFocused },
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocused()
+            },
         textStyle = TextStyle(
             color = textColor,
             fontSize = EditorTextMetrics.bodyFontSize,

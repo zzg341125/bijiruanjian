@@ -29,6 +29,48 @@ object AttachmentReferences {
             appendToBody(result, reference)
         }
 
+    fun insertAllAt(
+        body: String,
+        position: Int,
+        references: List<String>,
+    ): String {
+        if (references.isEmpty()) return body
+        val offset = position.coerceIn(0, body.length)
+        val before = body.substring(0, offset)
+        val after = body.substring(offset)
+        val leadingBreak = if (before.isEmpty() || before.endsWith('\n')) "" else "\n"
+        val trailingBreak = if (after.isEmpty() || after.startsWith('\n')) "" else "\n"
+        return before +
+            leadingBreak +
+            references.joinToString("\n") +
+            trailingBreak +
+            after
+    }
+
+    fun documentBlocks(body: String): List<DocumentBodyBlock> {
+        val references = references(body)
+        if (references.isEmpty()) {
+            return listOf(textBlock(body, 0, body.length, "text-start"))
+        }
+
+        val blocks = mutableListOf<DocumentBodyBlock>()
+        var cursor = 0
+        var textKey = "text-start"
+        references.forEach { reference ->
+            blocks += textBlock(body, cursor, reference.range.first, textKey)
+            blocks += DocumentBodyBlock(
+                key = "image-${reference.attachmentId}",
+                start = reference.range.first,
+                end = reference.range.last + 1,
+                imageId = reference.attachmentId,
+            )
+            cursor = reference.range.last + 1
+            textKey = "text-after-${reference.attachmentId}"
+        }
+        blocks += textBlock(body, cursor, body.length, textKey)
+        return blocks
+    }
+
     fun referencedImageIds(body: String): Set<Long> =
         references(body)
             .map { it.attachmentId }
@@ -94,6 +136,27 @@ object AttachmentReferences {
             .filter { it.id in ids && it.mimeType?.startsWith("image/") == true }
             .associateBy { it.id }
     }
+
+    private fun textBlock(
+        body: String,
+        start: Int,
+        end: Int,
+        key: String,
+    ): DocumentBodyBlock {
+        val raw = body.substring(start, end)
+        val leading = raw.takeWhile { it == '\n' }
+        val withoutLeading = raw.drop(leading.length)
+        val trailing = withoutLeading.takeLastWhile { it == '\n' }
+        val content = withoutLeading.dropLast(trailing.length)
+        return DocumentBodyBlock(
+            key = key,
+            start = start,
+            end = end,
+            text = content,
+            leadingNewlines = leading,
+            trailingNewlines = trailing,
+        )
+    }
 }
 
 fun AttachmentEntity.isImageAttachment(): Boolean {
@@ -114,3 +177,19 @@ data class AttachmentReference(
     val attachmentId: Long,
     val range: IntRange,
 )
+
+data class DocumentBodyBlock(
+    val key: String,
+    val start: Int,
+    val end: Int,
+    val text: String = "",
+    val leadingNewlines: String = "",
+    val trailingNewlines: String = "",
+    val imageId: Long? = null,
+) {
+    val isImage: Boolean
+        get() = imageId != null
+
+    fun replacementText(editedText: String): String =
+        leadingNewlines + editedText + trailingNewlines
+}

@@ -42,4 +42,54 @@ class AttachmentReferencesTest {
             updated,
         )
     }
+
+    @Test
+    fun insertsImagesAtTheCurrentBodyCursor() {
+        val reference = AttachmentReferences.imageMarkdown(7, "光标图片.png")
+
+        val updated = AttachmentReferences.insertAllAt("开头结尾", 2, listOf(reference))
+
+        assertEquals("开头\n$reference\n结尾", updated)
+    }
+
+    @Test
+    fun splitsTextAndImagesIntoDocumentOrderBlocks() {
+        val first = AttachmentReferences.imageMarkdown(1, "第一张.png")
+        val second = AttachmentReferences.imageMarkdown(2, "第二张.png")
+        val body = "开头\n$first\n中间\n$second\n结尾"
+
+        val blocks = AttachmentReferences.documentBlocks(body)
+
+        assertEquals(
+            listOf("text-start", "image-1", "text-after-1", "image-2", "text-after-2"),
+            blocks.map(DocumentBodyBlock::key),
+        )
+        assertEquals(listOf("开头", "中间", "结尾"), blocks.filterNot { it.isImage }.map { it.text })
+        assertEquals(listOf(1L, 2L), blocks.mapNotNull { it.imageId })
+    }
+
+    @Test
+    fun editingABlockPreservesImageSeparationNewlines() {
+        val reference = AttachmentReferences.imageMarkdown(1, "图片.png")
+        val body = "开头\n$reference\n结尾"
+        val before = AttachmentReferences.documentBlocks(body)
+            .first { it.key == "text-start" }
+
+        val firstEdit = body.replaceRange(
+            before.start,
+            before.end,
+            before.replacementText("修改后"),
+        )
+        val after = AttachmentReferences.documentBlocks(firstEdit)
+            .first { it.key == "text-after-1" }
+        val edited = firstEdit.replaceRange(
+            after.start,
+            after.end,
+            after.replacementText("新结尾"),
+        )
+
+        assertTrue(edited.startsWith("修改后\n"))
+        assertTrue(edited.contains(reference))
+        assertTrue(edited.endsWith("\n新结尾"))
+    }
 }

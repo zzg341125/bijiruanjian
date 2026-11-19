@@ -11,7 +11,11 @@ import android.webkit.MimeTypeMap
 import io.github.latticenotes.backup.DecodedMarkdownNote
 import io.github.latticenotes.backup.MarkdownNoteCodec
 import io.github.latticenotes.util.AttachmentReferences
+import io.github.latticenotes.util.FileImportModel
 import io.github.latticenotes.util.ImageEditing
+import io.github.latticenotes.util.ImportedNoteKind
+import io.github.latticenotes.util.LocalImportBatchResult
+import io.github.latticenotes.util.LocalImportResult
 import io.github.latticenotes.util.isImageAttachment
 import org.json.JSONObject
 import kotlinx.coroutines.flow.Flow
@@ -40,6 +44,7 @@ class NotesRepository(
         body: String = "",
         folderId: Long? = null,
         format: NoteFormat = NoteFormat.TEXT,
+        syncAsBinary: Boolean = false,
     ): Long {
         val id = dao.insert(
             NoteEntity(
@@ -47,6 +52,7 @@ class NotesRepository(
                 body = body,
                 folderId = folderId,
                 format = format.name,
+                syncAsBinary = syncAsBinary,
             ),
         )
         writeMarkdownMirror(id)
@@ -156,16 +162,8 @@ class NotesRepository(
 
     suspend fun addAttachment(noteId: Long, source: Uri): AttachmentEntity? {
         val resolver = context.contentResolver
-        val mime = resolver.getType(source)
-        val originalName = resolver.query(
-            source,
-            arrayOf(OpenableColumns.DISPLAY_NAME),
-            null,
-            null,
-            null,
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) cursor.getString(0) else null
-        } ?: "attachment"
+        val originalName = displayName(source, "attachment")
+        val mime = FileImportModel.mimeTypeFor(originalName, resolver.getType(source))
 
         val suffix = originalName.substringAfterLast('.', "").takeIf { it.isNotBlank() }
         val destinationName = buildString {
@@ -344,35 +342,80 @@ class NotesRepository(
     suspend fun search(query: String): List<NoteEntity> =
         dao.search(query.trim(), limit = 50)
 
-    suspend fun importMarkdown(uri: Uri): Long? {
-        val resolver = context.contentResolver
-        val displayName = resolver.query(
-            uri,
-            arrayOf(OpenableColumns.DISPLAY_NAME),
-            null,
-            null,
-            null,
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) cursor.getString(0) else null
-        } ?: "Imported note.md"
-        val content = resolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
-            val buffer = CharArray(8192)
-            val output = StringBuilder()
-            while (output.length < MAX_IMPORT_CHARS) {
-                val count = reader.read(buffer)
-                if (count < 0) break
-                output.append(buffer, 0, count)
+    suspend fun importFiles(uris: List<Uri>): LocalImportBatchResult {
+        val results = uris.map { uri ->
+            runCatching { importFile(uri) }.getOrElse { error ->
+                LocalImportResult(
+                    fileName = runCatching { displayName(uri, "未命名文件") }
+                        .getOrDefault("未命名文件"),
+                    errorMessage = error.message ?: "无法读取文件",
+                )
             }
-            output.toString().take(MAX_IMPORT_CHARS)
-        } ?: return null
-        val title = displayName
-            .substringBeforeLast('.', displayName)
-            .ifBlank { "Markdown 导入" }
-        return createNote(
-            title = title,
-            body = content,
-            format = NoteFormat.MARKDOWN,
-        )
+        }
+        return LocalImportBatchResult(results)
+    }
+
+    suspend fun importFile(uri: Uri): LocalImportResult {
+        val resolver = context.contentResolver
+        val fileName = displayName(uri, "导入文件")
+        val mimeType = FileImportModel.mimeTypeFor(fileName, resolver.getType(uri))
+        val kind = FileImportModel.kindFor(fileName, mimeType)
+        val title = FileImportModel.titleFor(fileName)
+        return when (kind) {
+            ImportedNoteKind.MARKDOWN, ImportedNoteKind.TEXT -> {
+                val content = resolver.openInputStream(uri)
+                    ?.bufferedReader(Charsets.UTF_8)
+                    ?.use { reader ->
+                        val buffer = CharArray(8192)
+                        val output = StringBuilder()
+                        while (output.length < MAX_IMPORT_CHARS) {
+                            val count = reader.read(buffer)
+                            if (count < 0) break
+                            output.append(buffer, 0, count)
+                        }
+                        output.toString().take(MAX_IMPORT_CHARS)
+                    }
+                    ?: error("无法读取 $fileName")
+                val noteId = createNote(
+                    title = title,
+                    body = content.removePrefix("\uFEFF"),
+                    format = if (kind == ImportedNoteKind.MARKDOWN) {
+                        NoteFormat.MARKDOWN
+                    } else {
+                        NoteFormat.TEXT
+                    },
+                )
+                LocalImportResult(fileName, noteId, kind)
+            }
+            ImportedNoteKind.ATTACHMENT -> {
+                val noteId = createNote(
+                    title = title,
+                    format = NoteFormat.TEXT,
+                    syncAsBinary = true,
+                )
+                val attachment = try {
+                    addAttachment(noteId, uri)
+                } catch (error: Throwable) {
+                    permanentlyDelete(noteId)
+                    throw error
+                }
+                if (attachment == null) {
+                    permanentlyDelete(noteId)
+                    error("无法复制 $fileName")
+                }
+                deleteMarkdownMirror(noteId)
+                registerImportedBinaryFile(noteId, attachment)
+                LocalImportResult(fileName, noteId, kind)
+            }
+        }
+    }
+
+    suspend fun importMarkdown(uri: Uri): Long? {
+        val result = importFile(uri)
+        return result.noteId?.takeIf {
+            result.kind == ImportedNoteKind.MARKDOWN ||
+                result.kind == ImportedNoteKind.TEXT
+        }
     }
 
     suspend fun getAllForBackup(): BackupPayload = BackupPayload(
@@ -719,6 +762,7 @@ class NotesRepository(
     private suspend fun writeMarkdownMirror(noteId: Long) {
         withContext(Dispatchers.IO) {
             val note = dao.getNote(noteId) ?: return@withContext
+            if (note.syncAsBinary) return@withContext
             val mappedName = readRemoteFileNames()[note.id]
             val legacyFile = File(markdownDirectory(), MarkdownNoteCodec.fileName(note.id))
             if (note.title.isBlank() && mappedName == null && !legacyFile.isFile) {
@@ -873,6 +917,53 @@ class NotesRepository(
             val uri = Uri.parse(uriValue)
             if (uri.scheme == "file") uri.path?.let { File(it).delete() }
         }
+    }
+
+    private fun displayName(uri: Uri, fallback: String): String =
+        context.contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }?.takeIf { it.isNotBlank() }
+            ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+            ?: fallback
+
+    private suspend fun registerImportedBinaryFile(
+        noteId: Long,
+        attachment: AttachmentEntity,
+    ) = withContext(Dispatchers.IO) {
+        val states = getBinarySyncStates().toMutableMap()
+        val remoteName = FileImportModel.uniqueRemoteName(
+            attachment.name,
+            states.keys,
+        )
+        val uri = Uri.parse(attachment.uri)
+        val localHash = uri.path
+            ?.let(::File)
+            ?.takeIf(File::isFile)
+            ?.inputStream()
+            ?.use { input ->
+                val digest = MessageDigest.getInstance("SHA-256")
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    digest.update(buffer, 0, count)
+                }
+                digest.digest().joinToString("") { "%02x".format(it) }
+            }
+            ?: return@withContext
+        states[remoteName] = BinarySyncState(
+            noteId = noteId,
+            attachmentId = attachment.id,
+            remoteFingerprint = "",
+            localHash = localHash,
+        )
+        saveBinarySyncStates(states)
     }
 
     companion object {
