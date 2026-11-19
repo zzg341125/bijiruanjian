@@ -1,12 +1,12 @@
 # Testing notes
 
-Tested on 2026-11-13 with:
+Tested on 2026-11-19 with:
 
 - Android emulator API 37
 - JDK 21
 - Gradle 8.9
 - Android Gradle Plugin 8.7.3
-- 曲阳便签 `0.11.9` (`versionCode` 11009)
+- 曲阳便签 `0.11.10` (`versionCode` 11010)
 
 ## Automated checks
 
@@ -17,12 +17,12 @@ Tested on 2026-11-13 with:
 ./gradlew assembleRelease
 ```
 
-Result on 2026-11-13:
+Result on 2026-11-19:
 
-- 79 unit tests pass with 0 failures and 0 errors.
-- Lint: 0 errors, 126 warnings (mostly upstream OAF deprecation notices).
+- 80 unit tests pass with 0 failures and 0 errors.
+- Lint: 0 errors, 128 warnings (mostly upstream OAF deprecation notices).
 - Debug APK builds and installs.
-- Release build passes R8 minification and produces a 34.7 MB unsigned APK.
+- Release build passes R8 minification and produces a 34.9 MB unsigned APK.
 - A debug-key-signed copy of the minified release APK installs and launches successfully.
 - The minified release APK opens and edits DOCX through OAF; the edit remains after process restart.
 - Release APK includes arm64-v8a, armeabi-v7a, x86 and x86_64; minimum Android is API 29.
@@ -45,7 +45,7 @@ Result on 2026-11-13:
 - Nutstore Link-header pagination follows all `rel="next"` pages on the same server.
 - Remote-imported files are not uploaded again during the same sync.
 - Sync summary reports the actual number of Nutstore directory pages scanned.
-- Local APK versionCode is 11009 for version 0.11.9.
+- Local APK versionCode is 11010 for version 0.11.10.
 - WebDAV folder traversal includes nested subfolders and preserves relative Markdown paths.
 - The download-and-restore action shows the full sync result rather than a fixed success message.
 - Imported notes are written before their attachments, satisfying the SQLite foreign key.
@@ -82,23 +82,23 @@ Result on 2026-11-13:
 - Returning from the Office editor leaves the user in the originating 曲阳便签 note editor without
   reopening the document in a loop.
 - Word and Excel top bars remain visible after the previous reading-mode auto-hide interval.
-- The supplied gradient note-and-pen artwork is used for legacy, adaptive and round launcher icons.
 - The document title is the first ruled-paper line; folder, date, count and format controls sit in a
   separate fixed information strip above the paper.
 - Pressing Enter in the title moves focus into the body without adding a line break to the title.
 - Ruled-paper line spacing is derived from the configured font scale, so the rules remain aligned
   with title and body text at 80%, 100% and 150% sizes.
-- The supplied wooden note and red pencil artwork is used for adaptive, round and legacy launcher
-  icons.
-- The home header keeps its category action on the title itself without a trailing arrow control.
-- The home search field is a compact 44dp rounded capsule.
-- Home note cards have a custom-drawn paperclip at their left edge.
-- Static APK analysis confirmed the reference list item uses a 22×56dp clip, a 10dp card
-  radius, and persistent pin/star controls in the timestamp row.
-- The clean-room Compose list now exposes only the left half of the original clip geometry and
-  keeps independent pin/star actions plus the overflow menu.
-- The reference APK's highest-resolution launcher icon was extracted from the `640dpi` resource
-  and regenerated as the adaptive, round and legacy launcher artwork.
+- The supplied Smartisan Notes launcher artwork is used for the package launcher and round icon.
+- The home header uses the reference wood title bar, centered category title, settings and compose
+  actions without extra header menus.
+- The home search field uses the reference 44dp white capsule.
+- Home note cards use the reference cream paper colors, 10dp radius, 52dp content inset, relative
+  timestamps and persistent pin/star controls.
+- Note cards expose only the left half of the reference clip artwork and keep actions available
+  through long press.
+- The launcher package resolves to the supplied Smartisan Notes icon for every density bucket.
+- Relative timestamps render as `今天`, Chinese weekday, day count and year-count formats.
+- The reference APK's highest-resolution `560dpi` launcher icon was copied for the installed app
+  icon and reused for the in-app share/export brand image.
 - The image editor supports up to 9 embedded images, multi-image selection, camera capture,
   two-line captions, crop boundaries, full-screen swiping preview, gallery save,
   drag/step reordering and deletion.
@@ -128,6 +128,8 @@ Result on 2026-11-13:
 - Single-file HTML export with inline icon and attachments.
 - Force-stop and relaunch: note persisted.
 - Search filters by title/body/tag.
+- Home list matches the reference wood background, toolbar controls, search capsule and card spacing.
+- Pin/star controls are independently tappable while card long press opens the note actions.
 - Folder creation and folder chip filtering.
 - Star action and Starred view.
 - Move to Trash, Trash view, and restore.

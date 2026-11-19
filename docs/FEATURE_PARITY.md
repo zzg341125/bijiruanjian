@@ -1,8 +1,10 @@
 # Feature parity
 
-This is a clean-room implementation. It does not contain decompiled application
-code, copied artwork, original application resources, branding, advertising SDKs,
-account services, or paid backend behavior.
+The business logic is an independent implementation. The current launcher icon,
+home background, title bar and note-card visual assets are reproduced from a
+user-supplied Smartisan Notes APK for the requested local UI migration. The app
+does not include the reference application's business code, advertising SDKs,
+account services or paid backend behavior.
 
 ## Implemented in v0.1
 
@@ -30,7 +32,7 @@ account services, or paid backend behavior.
 | Ruled paper editor | Yes, rules scroll with document content |
 | Title-first document flow | Yes, Enter moves from the title into the body |
 | Fixed home search | Yes |
-| Paperclip home list | Yes, half-exposed clip with persistent pin/star actions |
+| Paperclip home list | Yes, Smartisan-style wood background, title bar, half-exposed clip cards, relative timestamps and persistent pin/star actions |
 | Undo and redo history | Yes |
 | Visible rich-text formatting toolbar | Yes, Markdown remains hidden in the editor |
 | Self-contained HTML export | Yes |

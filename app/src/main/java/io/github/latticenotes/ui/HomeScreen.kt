@@ -4,12 +4,12 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,21 +37,16 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.List
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,6 +54,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -74,14 +71,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.paint
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -91,12 +87,13 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.latticenotes.R
 import io.github.latticenotes.data.FolderEntity
 import io.github.latticenotes.data.NoteEntity
 import io.github.latticenotes.data.NoteFormat
 import io.github.latticenotes.data.NotesRepository
 import io.github.latticenotes.util.AttachmentReferences
-import io.github.latticenotes.util.formatTimestamp
+import io.github.latticenotes.util.formatListTimestamp
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
@@ -116,6 +113,13 @@ private enum class NoteSort {
 }
 
 private val categoryTimeFormatter = DateTimeFormatter.ofPattern("MM/dd HH:mm")
+private val NoteListInk = Color(0xFF5C3C2A)
+private val NoteListTimeInk = Color(0x705C3C2A)
+private val NoteListCard = Color(0xFFFAF7EE)
+private val NoteListCardMargin = Color(0xFFF4EFE7)
+private val NoteListDivider = Color(0xFFE4D9CA)
+private val NoteListBorder = Color(0xFFE9E0D3)
+private val NoteListBarInk = Color(0xFFFFFCF7)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -147,7 +151,6 @@ fun HomeScreen(
     var query by remember { mutableStateOf("") }
     val searchFocus = remember { FocusRequester() }
     var categoryMenuOpen by remember { mutableStateOf(false) }
-    var appMenuOpen by remember { mutableStateOf(false) }
     var sortMenuOpen by remember { mutableStateOf(false) }
     var folderDialogOpen by remember { mutableStateOf(false) }
     var editFolder by remember { mutableStateOf<FolderEntity?>(null) }
@@ -206,11 +209,29 @@ fun HomeScreen(
     }
 
     Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .paint(
+                painter = painterResource(R.drawable.smartisan_note_background),
+                contentScale = ContentScale.FillBounds,
+            ),
+        containerColor = Color.Transparent,
         topBar = {
-            CenterAlignedTopAppBar(
+            Box(Modifier.fillMaxWidth()) {
+                Image(
+                    painter = painterResource(R.drawable.smartisan_title_bar),
+                    contentDescription = null,
+                    modifier = Modifier.matchParentSize(),
+                    contentScale = ContentScale.FillBounds,
+                )
+                CenterAlignedTopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Outlined.Settings, contentDescription = "设置")
+                        Image(
+                            painter = painterResource(R.drawable.smartisan_settings),
+                            contentDescription = "设置",
+                            modifier = Modifier.size(36.dp),
+                        )
                     }
                 },
                 title = {
@@ -223,7 +244,16 @@ fun HomeScreen(
                         ) {
                             Text(
                                 text = categoryTitle,
-                                fontWeight = FontWeight.SemiBold,
+                                color = NoteListBarInk,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Image(
+                                painter = painterResource(R.drawable.smartisan_title_arrow),
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .padding(start = 3.dp)
+                                    .size(18.dp),
                             )
                         }
                         DropdownMenu(
@@ -312,83 +342,56 @@ fun HomeScreen(
                                         folderDialogOpen = true
                                     },
                                 )
+                                DropdownMenuItem(
+                                    text = { Text("导入 Markdown") },
+                                    leadingIcon = { Icon(Icons.Outlined.Add, null) },
+                                    onClick = {
+                                        categoryMenuOpen = false
+                                        markdownPicker.launch(
+                                            arrayOf(
+                                                "text/markdown",
+                                                "text/x-markdown",
+                                                "text/plain",
+                                                "application/octet-stream",
+                                            ),
+                                        )
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("本地知识检索") },
+                                    leadingIcon = { Icon(Icons.Outlined.Info, null) },
+                                    onClick = {
+                                        categoryMenuOpen = false
+                                        onOpenKnowledge()
+                                    },
+                                )
                             }
                         }
                     }
                 },
                 actions = {
-                    IconButton(onClick = onOpenKnowledge) {
-                        Icon(Icons.Outlined.Info, contentDescription = "本地知识检索")
-                    }
-                    Box {
-                        IconButton(onClick = { appMenuOpen = true }) {
-                            Icon(Icons.Outlined.MoreVert, contentDescription = "更多")
-                        }
-                        DropdownMenu(
-                            expanded = appMenuOpen,
-                            onDismissRequest = { appMenuOpen = false },
+                    if (view != NoteView.TRASH) {
+                        IconButton(
+                            onClick = {
+                                onCreateNote(
+                                    selectedFolder?.id.takeIf { view == NoteView.FOLDER },
+                                )
+                            },
                         ) {
-                            DropdownMenuItem(
-                                text = { Text("新建文件夹") },
-                                leadingIcon = { Icon(Icons.Outlined.List, null) },
-                                onClick = {
-                                    appMenuOpen = false
-                                    editFolder = null
-                                    folderDialogOpen = true
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("导入 Markdown") },
-                                leadingIcon = { Icon(Icons.Outlined.Add, null) },
-                                onClick = {
-                                    appMenuOpen = false
-                                    markdownPicker.launch(
-                                        arrayOf(
-                                            "text/markdown",
-                                            "text/x-markdown",
-                                            "text/plain",
-                                            "application/octet-stream",
-                                        ),
-                                    )
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("管理文件夹") },
-                                leadingIcon = { Icon(Icons.Outlined.List, null) },
-                                onClick = {
-                                    appMenuOpen = false
-                                    selectedFolder = null
-                                    view = NoteView.ALL
-                                    editFolder = null
-                                    folderDialogOpen = true
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("排序") },
-                                onClick = {
-                                    appMenuOpen = false
-                                    sortMenuOpen = true
-                                },
+                            Image(
+                                painter = painterResource(R.drawable.smartisan_create),
+                                contentDescription = "新建便签",
+                                modifier = Modifier.size(36.dp),
                             )
                         }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = Color.Transparent,
+                    titleContentColor = NoteListBarInk,
+                    navigationIconContentColor = NoteListBarInk,
+                    actionIconContentColor = NoteListBarInk,
                 ),
-            )
-        },
-        floatingActionButton = {
-            if (view != NoteView.TRASH) {
-                ExtendedFloatingActionButton(
-                    onClick = {
-                        onCreateNote(selectedFolder?.id.takeIf { view == NoteView.FOLDER })
-                    },
-                    icon = { Icon(Icons.Outlined.Add, null) },
-                    text = { Text("新建") },
                 )
             }
         },
@@ -405,9 +408,7 @@ fun HomeScreen(
             )
 
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxSize(),
             ) {
                 if (filtered.isEmpty()) {
                     EmptyNotes(
@@ -417,10 +418,10 @@ fun HomeScreen(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            top = 12.dp,
-                            bottom = 96.dp,
+                            top = 0.dp,
+                            bottom = 24.dp,
                         ),
                     ) {
                         items(filtered, key = { it.id }) { note ->
@@ -736,11 +737,12 @@ private fun HomeSearchField(
     androidx.compose.material3.Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .height(44.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .height(44.dp)
+            .border(1.dp, NoteListBorder, RoundedCornerShape(24.dp)),
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
+        color = Color(0xFFFFFCF7),
+        shadowElevation = 1.dp,
     ) {
         Row(
             modifier = Modifier
@@ -752,17 +754,10 @@ private fun HomeSearchField(
                 imageVector = Icons.Outlined.Search,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = Color(0xFFC4B8A7),
             )
             Spacer(Modifier.width(9.dp))
             Box(Modifier.weight(1f)) {
-                if (query.isBlank()) {
-                    Text(
-                        text = "搜索标题、正文或标签",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-                    )
-                }
                 BasicTextField(
                     value = query,
                     onValueChange = onQueryChange,
@@ -770,12 +765,12 @@ private fun HomeSearchField(
                         .fillMaxWidth()
                         .focusRequester(focusRequester),
                     textStyle = TextStyle(
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = NoteListInk,
                         fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         lineHeight = MaterialTheme.typography.bodyMedium.lineHeight,
                     ),
                     singleLine = true,
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    cursorBrush = SolidColor(NoteListInk),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 )
             }
@@ -788,6 +783,7 @@ private fun HomeSearchField(
                         Icons.Outlined.Close,
                         contentDescription = "清空",
                         modifier = Modifier.size(18.dp),
+                        tint = Color(0xFF9D9180),
                     )
                 }
             }
@@ -811,179 +807,210 @@ private fun NoteCard(
     onShare: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    Box(Modifier.fillMaxWidth()) {
-        PaperclipGlyph(
+    val hasImage = remember(note.body) {
+        AttachmentReferences.referencedImageIds(note.body).isNotEmpty()
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 78.dp),
+    ) {
+        Image(
+            painter = painterResource(R.drawable.smartisan_clip),
+            contentDescription = null,
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .size(width = 22.dp, height = 56.dp),
+                .size(width = 29.dp, height = 76.dp),
+            contentScale = ContentScale.Fit,
         )
-        Card(
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 12.dp)
+                .padding(horizontal = 12.dp)
+                .heightIn(min = 78.dp)
+                .border(
+                    width = 0.7.dp,
+                    color = NoteListBorder,
+                    shape = RoundedCornerShape(10.dp),
+                )
                 .combinedClickable(
                     onClick = onClick,
                     onLongClick = { menuOpen = true },
                 ),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFFF3E8D3),
-                contentColor = Color(0xFF20231F),
-            ),
             shape = RoundedCornerShape(10.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            color = Color.Transparent,
+            shadowElevation = 1.dp,
         ) {
-            Column(
-                Modifier
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
                     .drawBehind {
-                        val step = 32.dp.toPx()
-                        var y = step
-                        while (y < size.height) {
-                            drawLine(
-                                color = Color(0xFF8D806E).copy(alpha = 0.12f),
-                                start = androidx.compose.ui.geometry.Offset(0f, y),
-                                end = androidx.compose.ui.geometry.Offset(size.width, y),
-                                strokeWidth = 1f,
-                            )
-                            y += step
-                        }
+                        drawRect(NoteListCard)
+                        val dividerX = 38.dp.toPx()
+                        drawRect(
+                            color = NoteListCardMargin,
+                            size = androidx.compose.ui.geometry.Size(dividerX, size.height),
+                        )
+                        drawLine(
+                            color = NoteListDivider,
+                            start = Offset(dividerX, 0f),
+                            end = Offset(dividerX, size.height),
+                            strokeWidth = 1.dp.toPx(),
+                        )
                     },
             ) {
+                Text(
+                    text = formatListTimestamp(note.updatedAt),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 52.dp, top = 8.dp, end = 84.dp),
+                    color = NoteListTimeInk,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Row(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(24.dp),
+                        .align(Alignment.TopEnd)
+                        .padding(end = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = formatTimestamp(note.updatedAt),
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF676B66),
-                        maxLines = 1,
-                    )
-                    PinGlyph(
-                        active = note.pinned,
-                        modifier = Modifier
-                            .size(17.dp)
-                            .pointerInput(Unit) {
-                                detectTapGestures(onTap = { onTogglePin() })
+                    Image(
+                        painter = painterResource(
+                            if (note.pinned) {
+                                R.drawable.smartisan_pin_checked
+                            } else {
+                                R.drawable.smartisan_pin_normal
                             },
-                    )
-                    Spacer(Modifier.width(5.dp))
-                    Text(
-                        text = if (note.starred) "★" else "☆",
+                        ),
+                        contentDescription = if (note.pinned) "取消置顶" else "置顶",
                         modifier = Modifier
-                            .pointerInput(Unit) {
-                                detectTapGestures(onTap = { onToggleStar() })
-                            }
-                            .padding(horizontal = 4.dp),
-                        color = if (note.starred) Color(0xFFE4AE27) else Color(0xFFAAA39A),
-                        fontSize = 19.sp,
-                        lineHeight = 20.sp,
+                            .size(width = 32.dp, height = 38.5.dp)
+                            .clickable(onClick = onTogglePin),
+                        contentScale = ContentScale.Fit,
                     )
-                    Box {
-                        IconButton(
-                            onClick = { menuOpen = true },
-                            modifier = Modifier.size(36.dp),
-                        ) {
-                            Icon(Icons.Outlined.MoreVert, "更多操作", Modifier.size(20.dp))
-                        }
-                        DropdownMenu(
-                            expanded = menuOpen,
-                            onDismissRequest = { menuOpen = false },
-                        ) {
-                        if (trashed) {
-                            DropdownMenuItem(
-                                text = { Text("恢复") },
-                                leadingIcon = { Icon(Icons.Outlined.Refresh, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    onRestore()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("永久删除") },
-                                leadingIcon = { Icon(Icons.Outlined.Delete, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    onDelete()
-                                },
-                            )
-                        } else {
-                            DropdownMenuItem(
-                                text = { Text(if (note.pinned) "取消置顶" else "置顶") },
-                                leadingIcon = { Icon(Icons.Outlined.Star, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    onTogglePin()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (note.starred) "取消加星" else "加星") },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Outlined.Star,
-                                        null,
-                                    )
-                                },
-                                onClick = {
-                                    menuOpen = false
-                                    onToggleStar()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("移动文件夹") },
-                                leadingIcon = { Icon(Icons.Outlined.List, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    onFolder()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("标签") },
-                                leadingIcon = { Icon(Icons.Outlined.Edit, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    onTags()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("创建副本") },
-                                leadingIcon = { Icon(Icons.Outlined.Add, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    onDuplicate()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("分享文本") },
-                                leadingIcon = { Icon(Icons.Outlined.Share, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    onShare()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("移到回收站") },
-                                leadingIcon = { Icon(Icons.Outlined.Delete, null) },
-                                onClick = {
-                                    menuOpen = false
-                                    onDelete()
-                                },
-                            )
-                        }
-                        }
-                    }
+                    Image(
+                        painter = painterResource(
+                            if (note.starred) {
+                                R.drawable.smartisan_star_checked
+                            } else {
+                                R.drawable.smartisan_star_normal
+                            },
+                        ),
+                        contentDescription = if (note.starred) "取消加星" else "加星",
+                        modifier = Modifier
+                            .size(width = 32.dp, height = 38.5.dp)
+                            .clickable(onClick = onToggleStar),
+                        contentScale = ContentScale.Fit,
+                    )
                 }
-                Spacer(Modifier.height(2.dp))
                 Text(
                     text = note.title.ifBlank { "无标题" },
-                    modifier = Modifier.fillMaxWidth(),
-                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(
+                            start = 52.dp,
+                            top = 38.5.dp,
+                            end = if (hasImage) 38.dp else 18.dp,
+                        ),
+                    color = NoteListInk,
+                    fontSize = 16.5.sp,
+                    lineHeight = 22.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+                if (hasImage) {
+                    Image(
+                        painter = painterResource(R.drawable.smartisan_image_indicator),
+                        contentDescription = "包含图片",
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 15.dp, bottom = 8.dp)
+                            .size(width = 24.dp, height = 28.dp),
+                        contentScale = ContentScale.Fit,
+                    )
+                }
+            }
+        }
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+        ) {
+            if (trashed) {
+                DropdownMenuItem(
+                    text = { Text("恢复") },
+                    leadingIcon = { Icon(Icons.Outlined.Refresh, null) },
+                    onClick = {
+                        menuOpen = false
+                        onRestore()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("永久删除") },
+                    leadingIcon = { Icon(Icons.Outlined.Delete, null) },
+                    onClick = {
+                        menuOpen = false
+                        onDelete()
+                    },
+                )
+            } else {
+                DropdownMenuItem(
+                    text = { Text(if (note.pinned) "取消置顶" else "置顶") },
+                    leadingIcon = { Icon(Icons.Outlined.Star, null) },
+                    onClick = {
+                        menuOpen = false
+                        onTogglePin()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text(if (note.starred) "取消加星" else "加星") },
+                    leadingIcon = { Icon(Icons.Outlined.Star, null) },
+                    onClick = {
+                        menuOpen = false
+                        onToggleStar()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("移动文件夹") },
+                    leadingIcon = { Icon(Icons.Outlined.List, null) },
+                    onClick = {
+                        menuOpen = false
+                        onFolder()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("标签") },
+                    leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+                    onClick = {
+                        menuOpen = false
+                        onTags()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("创建副本") },
+                    leadingIcon = { Icon(Icons.Outlined.Add, null) },
+                    onClick = {
+                        menuOpen = false
+                        onDuplicate()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("分享文本") },
+                    leadingIcon = { Icon(Icons.Outlined.Share, null) },
+                    onClick = {
+                        menuOpen = false
+                        onShare()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("移到回收站") },
+                    leadingIcon = { Icon(Icons.Outlined.Delete, null) },
+                    onClick = {
+                        menuOpen = false
+                        onDelete()
+                    },
                 )
             }
         }
@@ -991,108 +1018,30 @@ private fun NoteCard(
 }
 
 @Composable
-private fun PinGlyph(active: Boolean, modifier: Modifier = Modifier) {
-    val color = if (active) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        Color(0xFFAAA39A)
-    }
-    Canvas(modifier) {
-        val path = Path().apply {
-            moveTo(size.width * 0.34f, size.height * 0.08f)
-            lineTo(size.width * 0.66f, size.height * 0.08f)
-            lineTo(size.width * 0.60f, size.height * 0.40f)
-            lineTo(size.width * 0.78f, size.height * 0.56f)
-            lineTo(size.width * 0.22f, size.height * 0.56f)
-            lineTo(size.width * 0.40f, size.height * 0.40f)
-            close()
-        }
-        drawPath(path, color)
-        drawLine(
-            color = color,
-            start = Offset(size.width * 0.50f, size.height * 0.56f),
-            end = Offset(size.width * 0.50f, size.height * 0.92f),
-            strokeWidth = 1.7.dp.toPx(),
-            cap = StrokeCap.Round,
-        )
-    }
-}
-
-@Composable
-private fun PaperclipGlyph(
-    modifier: Modifier = Modifier,
-    color: Color = Color(0xFF969087).copy(alpha = 0.86f),
-) {
-    Canvas(modifier) {
-        val stroke = 1.8.dp.toPx()
-        val path = Path().apply {
-            moveTo(size.width, size.height * 0.25f)
-            lineTo(size.width * 0.25f, size.height * 0.25f)
-            quadraticTo(
-                size.width * 0.06f,
-                size.height * 0.25f,
-                size.width * 0.06f,
-                size.height * 0.36f,
-            )
-            lineTo(size.width * 0.06f, size.height * 0.64f)
-            quadraticTo(
-                size.width * 0.06f,
-                size.height * 0.75f,
-                size.width * 0.25f,
-                size.height * 0.75f,
-            )
-            lineTo(size.width, size.height * 0.75f)
-            moveTo(size.width, size.height * 0.37f)
-            lineTo(size.width * 0.32f, size.height * 0.37f)
-            quadraticTo(
-                size.width * 0.19f,
-                size.height * 0.37f,
-                size.width * 0.19f,
-                size.height * 0.45f,
-            )
-            lineTo(size.width * 0.19f, size.height * 0.55f)
-            quadraticTo(
-                size.width * 0.19f,
-                size.height * 0.63f,
-                size.width * 0.32f,
-                size.height * 0.63f,
-            )
-            lineTo(size.width, size.height * 0.63f)
-        }
-        drawPath(
-            path = path,
-            color = color,
-            style = Stroke(
-                width = stroke,
-                cap = StrokeCap.Round,
-            ),
-        )
-    }
-}
-
-@Composable
 private fun EmptyNotes(isSearching: Boolean, isTrash: Boolean) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = if (isTrash) Icons.Outlined.Delete else Icons.Outlined.Edit,
+            Image(
+                painter = painterResource(R.drawable.smartisan_note_empty),
                 contentDescription = null,
-                modifier = Modifier.size(72.dp),
-                tint = MaterialTheme.colorScheme.outlineVariant,
+                modifier = Modifier.size(width = 114.dp, height = 120.dp),
+                contentScale = ContentScale.Fit,
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
             Text(
                 text = when {
                     isSearching -> "没有匹配的笔记"
                     isTrash -> "回收站为空"
                     else -> "还没有笔记"
                 },
-                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFFB8A99A),
+                fontSize = 16.sp,
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = if (isSearching) "换个关键词试试" else "点击右下角新建笔记",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = if (isSearching) "换个关键词试试" else "点击右上角新建笔记",
+                color = Color(0xFFC4B6A5),
+                fontSize = 13.sp,
             )
         }
     }

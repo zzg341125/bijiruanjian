@@ -1,12 +1,12 @@
 # 曲阳便签
 
-曲阳便签是一个原创、本地优先、无广告的 Android 开源笔记应用。项目采用 Kotlin、Jetpack Compose、Room 和 Material 3。
+曲阳便签是一个本地优先、无广告的 Android 开源笔记应用。项目采用 Kotlin、Jetpack Compose、Room 和 Material 3。
 
-> 本项目没有复制 Smartisan Notes 的代码、资源、品牌或第三方 SDK。功能设计仅参考通用笔记应用需求与公开可见的交互行为。
+> 业务代码为独立实现。当前启动图标、主页背景、标题栏和笔记卡片视觉素材来自用户提供的锤子便签 APK，用于用户指定的本地界面迁移；项目不包含其业务代码、广告 SDK、账号服务或付费后端。
 
 ## 截图
 
-| 分类菜单 | 信纸编辑器 | 图片操作 |
+| 笔记列表 | 信纸编辑器 | 图片操作 |
 | --- | --- | --- |
 | ![笔记列表](docs/screenshot-quyang-home.png) | ![信纸编辑器](docs/screenshot-quyang-editor.png) | ![图片操作](docs/screenshot-editor-image-tools.png) |
 
@@ -15,8 +15,8 @@
 - 普通文本、Markdown、待办三种便签模式
 - 标题、正文、标签、文件夹和自动保存
 - 主页固定搜索框
-- 首页采用圆角紧凑搜索栏、左侧半露回形针笔记卡片和无箭头分类标题
-- 笔记时间行常驻置顶与加星按钮，更多操作保留在右侧菜单
+- 首页完整采用锤子便签式木质背景、标题栏、搜索框、半露回形针卡片、相对时间与置顶/加星图标
+- 长按笔记卡片打开移动、标签、副本、分享和删除等操作
 - 编辑器撤销/重做历史
 - 可视化格式工具栏：标题、居中、列表、粗体、引用和待办只显示效果，不暴露 Markdown 代码
 - 信纸编辑器以标题为第一行，回车直接进入正文；格线行高随字号同步，并与文字一起滚动
@@ -31,7 +31,7 @@
 - 内置 OAF Office 编辑器，可离线打开、编辑并原位保存 docx/xlsx，不依赖 WPS 或 Microsoft 365
 - 打开 Word/Excel 记事时直接进入 Office 编辑器，返回后回到曲阳便签
 - Office 顶部菜单栏固定显示，文档阅读和编辑时都可直接操作
-- 使用木框信纸与红铅笔作为应用启动图标
+- 安装后使用锤子便签的木框信纸与红铅笔图标
 - 导出正文、图片和内置图标合并的单文件 HTML
 - 密码加密的完整备份：记事、文件夹、提醒、图片和附件统一导出为 `.qbak`
 - 直接批量导入 `.md` 文件
@@ -108,8 +108,8 @@ app/build/outputs/apk/debug/app-debug.apk
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.11.9
-git push origin v0.11.9
+git tag v0.11.10
+git push origin v0.11.10
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。
