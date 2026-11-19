@@ -15,10 +15,10 @@ android {
     val releaseVersionCode = providers.gradleProperty("versionCode")
         .orNull
         ?.toIntOrNull()
-        ?: 11_010
+        ?: 11_011
     val releaseVersionName = providers.gradleProperty("versionName")
         .orNull
-        ?: "0.11.10"
+        ?: "0.11.11"
     val personalWebDavUrl = providers.gradleProperty("personalWebDavUrl").orNull.orEmpty()
     val personalWebDavUsername = providers.gradleProperty("personalWebDavUsername").orNull.orEmpty()
     val personalWebDavPassword = providers.gradleProperty("personalWebDavPassword").orNull.orEmpty()

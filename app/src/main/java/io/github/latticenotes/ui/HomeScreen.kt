@@ -815,14 +815,6 @@ private fun NoteCard(
             .fillMaxWidth()
             .heightIn(min = 78.dp),
     ) {
-        Image(
-            painter = painterResource(R.drawable.smartisan_clip),
-            contentDescription = null,
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .size(width = 29.dp, height = 76.dp),
-            contentScale = ContentScale.Fit,
-        )
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -934,6 +926,14 @@ private fun NoteCard(
                 }
             }
         }
+        Image(
+            painter = painterResource(R.drawable.smartisan_clip),
+            contentDescription = null,
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .size(width = 29.dp, height = 76.dp),
+            contentScale = ContentScale.Fit,
+        )
         DropdownMenu(
             expanded = menuOpen,
             onDismissRequest = { menuOpen = false },

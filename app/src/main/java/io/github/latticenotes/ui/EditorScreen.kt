@@ -437,7 +437,17 @@ fun EditorScreen(
     LaunchedEffect(noteId, officeAttachment?.id) {
         if (!autoOpenedOffice && officeAttachment != null) {
             autoOpenedOffice = true
+            currentNote?.let {
+                repository.save(
+                    it.copy(
+                        title = title,
+                        body = body,
+                        format = format.name,
+                    ),
+                )
+            }
             openAttachment(context, officeAttachment)
+            onBack()
         }
     }
 
@@ -931,7 +941,25 @@ fun EditorScreen(
                 if (fileAttachments.isNotEmpty()) {
                     AttachmentStrip(
                         attachments = fileAttachments,
-                        onOpen = { openAttachment(context, it) },
+                        onOpen = { attachment ->
+                            if (attachment.isEmbeddedOfficeDocument()) {
+                                scope.launch {
+                                    currentNote?.let {
+                                        repository.save(
+                                            it.copy(
+                                                title = title,
+                                                body = body,
+                                                format = format.name,
+                                            ),
+                                        )
+                                    }
+                                    openAttachment(context, attachment)
+                                    onBack()
+                                }
+                            } else {
+                                openAttachment(context, attachment)
+                            }
+                        },
                         onDelete = { attachmentToDelete = it },
                     )
                 }

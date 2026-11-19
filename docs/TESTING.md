@@ -6,7 +6,7 @@ Tested on 2026-11-19 with:
 - JDK 21
 - Gradle 8.9
 - Android Gradle Plugin 8.7.3
-- 曲阳便签 `0.11.10` (`versionCode` 11010)
+- 曲阳便签 `0.11.11` (`versionCode` 11011)
 
 ## Automated checks
 
@@ -19,7 +19,7 @@ Tested on 2026-11-19 with:
 
 Result on 2026-11-19:
 
-- 80 unit tests pass with 0 failures and 0 errors.
+- 81 unit tests pass with 0 failures and 0 errors.
 - Lint: 0 errors, 128 warnings (mostly upstream OAF deprecation notices).
 - Debug APK builds and installs.
 - Release build passes R8 minification and produces a 34.9 MB unsigned APK.
@@ -45,7 +45,7 @@ Result on 2026-11-19:
 - Nutstore Link-header pagination follows all `rel="next"` pages on the same server.
 - Remote-imported files are not uploaded again during the same sync.
 - Sync summary reports the actual number of Nutstore directory pages scanned.
-- Local APK versionCode is 11010 for version 0.11.10.
+- Local APK versionCode is 11011 for version 0.11.11.
 - WebDAV folder traversal includes nested subfolders and preserves relative Markdown paths.
 - The download-and-restore action shows the full sync result rather than a fixed success message.
 - Imported notes are written before their attachments, satisfying the SQLite foreign key.
@@ -79,8 +79,7 @@ Result on 2026-11-19:
 - Rich formatting survives leaving and reopening the note while the Markdown source remains
   available for search, sync and export.
 - Opening a DOCX or XLSX note from the home list launches the embedded Office editor directly.
-- Returning from the Office editor leaves the user in the originating 曲阳便签 note editor without
-  reopening the document in a loop.
+- Exiting the Office editor returns directly to the note list without reopening the document.
 - Word and Excel top bars remain visible after the previous reading-mode auto-hide interval.
 - The document title is the first ruled-paper line; folder, date, count and format controls sit in a
   separate fixed information strip above the paper.
@@ -95,8 +94,12 @@ Result on 2026-11-19:
   timestamps and persistent pin/star controls.
 - Note cards expose only the left half of the reference clip artwork and keep actions available
   through long press.
+- The paperclip is rendered above the card layer so its overlapping half remains recognisable.
 - The launcher package resolves to the supplied Smartisan Notes icon for every density bucket.
 - Relative timestamps render as `今天`, Chinese weekday, day count and year-count formats.
+- Long body editing keeps the active caret line above the IME and fixed format toolbar.
+- WebDAV synchronization emits started, successful and failed status states for both automatic and
+  manual synchronization.
 - The reference APK's highest-resolution `560dpi` launcher icon was copied for the installed app
   icon and reused for the in-app share/export brand image.
 - The image editor supports up to 9 embedded images, multi-image selection, camera capture,

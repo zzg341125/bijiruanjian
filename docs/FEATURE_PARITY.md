@@ -38,6 +38,9 @@ account services or paid backend behavior.
 | Self-contained HTML export | Yes |
 | Encrypted full backup and merge import | Yes, AES-256-GCM `.qbak` |
 | Direct embedded Office opening | Yes, DOCX/XLSX notes open in OAF immediately |
+| Office exit destination | Yes, returns directly to the note list |
+| Keyboard-safe long editing | Yes, the active line scrolls above the keyboard |
+| Sync status feedback | Yes, syncing, success and failure banners |
 | Incoming text share | Yes |
 | App shortcuts | Yes |
 

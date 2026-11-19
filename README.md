@@ -8,7 +8,7 @@
 
 | 笔记列表 | 信纸编辑器 | 图片操作 |
 | --- | --- | --- |
-| ![笔记列表](docs/screenshot-quyang-home.png) | ![信纸编辑器](docs/screenshot-quyang-editor.png) | ![图片操作](docs/screenshot-editor-image-tools.png) |
+| ![笔记列表](docs/screenshot-quyang-home.jpg) | ![信纸编辑器](docs/screenshot-quyang-editor.png) | ![图片操作](docs/screenshot-editor-image-tools.png) |
 
 ## 功能
 
@@ -20,6 +20,7 @@
 - 编辑器撤销/重做历史
 - 可视化格式工具栏：标题、居中、列表、粗体、引用和待办只显示效果，不暴露 Markdown 代码
 - 信纸编辑器以标题为第一行，回车直接进入正文；格线行高随字号同步，并与文字一起滚动
+- 编辑长内容时自动上移页面，正在输入的文字始终保持在键盘和格式栏上方
 - 顶部分类菜单：全部、加星、文件夹、回收站及实时数量
 - 置顶、加星、软删除、恢复和永久删除
 - 标题与正文搜索，本地知识检索
@@ -29,13 +30,14 @@
 - 任意文档附件
 - 图片附件可嵌入 Markdown 记事和单文件 HTML
 - 内置 OAF Office 编辑器，可离线打开、编辑并原位保存 docx/xlsx，不依赖 WPS 或 Microsoft 365
-- 打开 Word/Excel 记事时直接进入 Office 编辑器，返回后回到曲阳便签
+- 打开 Word/Excel 记事时直接进入 Office 编辑器，退出后直接回到便签列表
 - Office 顶部菜单栏固定显示，文档阅读和编辑时都可直接操作
 - 安装后使用锤子便签的木框信纸与红铅笔图标
 - 导出正文、图片和内置图标合并的单文件 HTML
 - 密码加密的完整备份：记事、文件夹、提醒、图片和附件统一导出为 `.qbak`
 - 直接批量导入 `.md` 文件
 - WebDAV 前台每 30 秒自动同步，每篇记事保存为独立的 Markdown 文件
+- WebDAV 同步开始时显示“正在同步”，完成后显示“同步成功”或“同步失败”
 - 自动创建「曲阳便签」WebDAV 专用目录，支持批量同步几十个 Markdown 文件
 - Obsidian 式三方同步：本地、远端和上次记录对比，支持冲突与删除传播
 - 超过一半的批量删除会被自动拦截，避免 WebDAV 异常导致本地笔记全部丢失
@@ -108,8 +110,8 @@ app/build/outputs/apk/debug/app-debug.apk
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.11.10
-git push origin v0.11.10
+git tag v0.11.11
+git push origin v0.11.11
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。

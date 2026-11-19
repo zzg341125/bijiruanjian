@@ -3,6 +3,9 @@ package io.github.latticenotes.data
 import io.github.latticenotes.backup.DecodedMarkdownNote
 import io.github.latticenotes.backup.MarkdownNoteCodec
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -13,6 +16,17 @@ object OnlineSyncManager {
     const val FOREGROUND_SYNC_INTERVAL_MILLIS = 30_000L
     private val syncMutex = Mutex()
     private val cooldown = SyncCooldown()
+    private val _events = MutableSharedFlow<SyncEvent>(extraBufferCapacity = 8)
+
+    val events: SharedFlow<SyncEvent> = _events.asSharedFlow()
+
+    sealed interface SyncEvent {
+        data object Started : SyncEvent
+        data class Finished(
+            val message: String,
+            val successful: Boolean,
+        ) : SyncEvent
+    }
 
     suspend fun sync(
         repository: NotesRepository,
@@ -24,15 +38,18 @@ object OnlineSyncManager {
             return@withLock null
         }
         if (cooldown.isActive()) {
-            return@withLock if (force) {
+            val message = if (force) {
                 val minutes = ceil(cooldown.remainingMillis() / 60_000.0).toInt()
                 "同步冷却中：坚果云刚刚限流或服务不可用，请约 $minutes 分钟后再试。"
             } else {
                 null
             }
+            message?.let { _events.tryEmit(SyncEvent.Finished(it, successful = false)) }
+            return@withLock message
         }
 
-        withContext(Dispatchers.IO) {
+        _events.tryEmit(SyncEvent.Started)
+        val result = withContext(Dispatchers.IO) {
             runCatching {
                 val client = WebDavClient(
                     WebDavConfig(
@@ -284,7 +301,19 @@ object OnlineSyncManager {
                 }
             }
         }
+        result?.let {
+            _events.tryEmit(
+                SyncEvent.Finished(
+                    message = it,
+                    successful = isSuccessfulSyncMessage(it),
+                ),
+            )
+        }
+        result
     }
+
+    internal fun isSuccessfulSyncMessage(message: String): Boolean =
+        message.startsWith("Markdown 同步完成")
 
     private suspend fun syncBinaryFiles(
         client: WebDavClient,
