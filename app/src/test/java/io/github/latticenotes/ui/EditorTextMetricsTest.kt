@@ -7,17 +7,17 @@ class EditorTextMetricsTest {
     @Test
     fun ruledPaperLineHeightFollowsConfiguredFontScale() {
         assertEquals(
-            32f,
+            42f,
             EditorTextMetrics.lineHeightDp(1f).value,
             0.001f,
         )
         assertEquals(
-            25.6f,
+            33.6f,
             EditorTextMetrics.lineHeightDp(0.8f).value,
             0.001f,
         )
         assertEquals(
-            48f,
+            63f,
             EditorTextMetrics.lineHeightDp(1.5f).value,
             0.001f,
         )

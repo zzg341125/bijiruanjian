@@ -20,6 +20,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,6 +38,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -90,9 +92,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.paint
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -112,6 +116,8 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -128,7 +134,9 @@ import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import io.github.latticenotes.R
 import io.github.latticenotes.backup.SingleFileExporter
+import io.github.latticenotes.data.AppSettings
 import io.github.latticenotes.data.AttachmentEntity
 import io.github.latticenotes.data.NoteFormat
 import io.github.latticenotes.data.NotesRepository
@@ -153,14 +161,13 @@ import java.time.format.DateTimeFormatter
 import java.util.Calendar
 import kotlin.math.abs
 
-private val EditorToolbar = Color(0xFF58483C)
-private val EditorPaper = Color(0xFFFDF8EC)
-private val EditorInk = Color(0xFF563C30)
-private val EditorMutedInk = Color(0xFF87796B)
-private val EditorRule = Color(0xFFD8C9B1)
-private val EditorFormatBar = Color(0xFFFFF1D3)
+private val EditorToolbarInk = Color(0xFFFFFCF7)
 private val EditorAccent = Color(0xFFC47B28)
 private val EditorShareSheet = Color(0xFFF4F2EF)
+private val EditorMutedInk = Color(0xFF897966)
+private val EditorRule = Color(0xFFDED4C5)
+private val EditorFormatBar = Color(0xFFFBF7ED)
+private val EditorFormatInk = Color(0xFF4D4A46)
 private val editorClockFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val editorDateFormatter = DateTimeFormatter.ofPattern("M月d日")
 
@@ -169,6 +176,7 @@ private val editorDateFormatter = DateTimeFormatter.ofPattern("M月d日")
 fun EditorScreen(
     noteId: Long,
     repository: NotesRepository,
+    settings: AppSettings,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -433,6 +441,8 @@ fun EditorScreen(
     val officeAttachment = fileAttachments.firstEmbeddedOfficeAttachment()
     val editorBody = AttachmentReferences.plainText(body)
     val editorLineSpacing = EditorTextMetrics.lineHeightDp(LocalDensity.current.fontScale)
+    val paperStyle = NotePaperStyle.fromStorage(settings.notePaperStyle)
+    val paper = notePaperPalette(paperStyle)
 
     LaunchedEffect(noteId, officeAttachment?.id) {
         if (!autoOpenedOffice && officeAttachment != null) {
@@ -454,105 +464,116 @@ fun EditorScreen(
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
-            .imePadding(),
+            .imePadding()
+            .paint(
+                painter = painterResource(R.drawable.smartisan_note_background),
+                contentScale = ContentScale.FillBounds,
+            ),
         topBar = {
             Surface(
-                color = EditorToolbar,
-                contentColor = Color(0xFFFFF8EA),
-                shadowElevation = 4.dp,
+                color = Color.Transparent,
+                contentColor = EditorToolbarInk,
+                shadowElevation = 0.dp,
             ) {
-                Column(Modifier.statusBarsPadding()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        IconButton(onClick = ::goBack) {
-                            Icon(Icons.Outlined.ArrowBack, contentDescription = "返回")
-                        }
-                        Spacer(Modifier.weight(1f))
-                        TextButton(
-                            onClick = ::undo,
-                            enabled = history.canUndo,
+                Box {
+                    Image(
+                        painter = painterResource(R.drawable.smartisan_title_bar),
+                        contentDescription = null,
+                        modifier = Modifier.matchParentSize(),
+                        contentScale = ContentScale.FillBounds,
+                    )
+                    Column(Modifier.statusBarsPadding()) {
+                        Row(
                             modifier = Modifier
-                                .width(58.dp)
-                                .height(40.dp),
-                            contentPadding = PaddingValues(horizontal = 4.dp),
+                                .fillMaxWidth()
+                                .height(52.dp)
+                                .padding(horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                text = "撤销",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                color = if (history.canUndo) {
-                                    Color(0xFFFFF8EA)
-                                } else {
-                                    Color(0x66FFF8EA)
-                                },
-                            )
-                        }
-                        TextButton(
-                            onClick = ::redo,
-                            enabled = history.canRedo,
-                            modifier = Modifier
-                                .width(58.dp)
-                                .height(40.dp),
-                            contentPadding = PaddingValues(horizontal = 4.dp),
-                        ) {
-                            Text(
-                                text = "重做",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                color = if (history.canRedo) {
-                                    Color(0xFFFFF8EA)
-                                } else {
-                                    Color(0x66FFF8EA)
-                                },
-                            )
-                        }
-                        IconButton(
-                            onClick = { insertImageMenuOpen = true },
-                            modifier = Modifier.size(40.dp),
-                        ) {
-                            ImageToolGlyph(
-                                glyph = ImageGlyph.GALLERY,
-                                color = Color(0xFFFFF8EA),
-                                modifier = Modifier.size(24.dp),
-                                contentDescription = "插入图片",
-                            )
-                        }
-                        IconButton(
-                            onClick = ::goBack,
-                            modifier = Modifier.size(40.dp),
-                        ) {
-                            Text(
-                                text = "✓",
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Medium,
-                            )
-                        }
-                        IconButton(
-                            onClick = {
-                                keyboardController?.hide()
-                                shareSheetOpen = true
-                            },
-                            modifier = Modifier.size(40.dp),
-                        ) {
-                            SendPlaneGlyph(
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                EditorTitleButton(
+                                    contentDescription = "返回",
+                                    onClick = ::goBack,
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.ArrowBack,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(25.dp),
+                                    )
+                                }
+                                EditorTitleButton(
+                                    contentDescription = "撤销",
+                                    enabled = history.canUndo,
+                                    onClick = ::undo,
+                                ) {
+                                    UndoRedoGlyph(undo = true)
+                                }
+                                EditorTitleButton(
+                                    contentDescription = "重做",
+                                    enabled = history.canRedo,
+                                    onClick = ::redo,
+                                ) {
+                                    UndoRedoGlyph(undo = false)
+                                }
+                            }
+                            Box(
                                 modifier = Modifier
-                                    .size(23.dp)
-                                    .semantics { contentDescription = "分享" },
-                            )
-                        }
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable { folderDialog = true },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = currentFolder?.name ?: "全部便签",
+                                        color = EditorToolbarInk,
+                                        fontSize = 19.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = " ▾",
+                                        color = EditorToolbarInk.copy(alpha = 0.75f),
+                                        fontSize = 13.sp,
+                                    )
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                EditorTitleButton(
+                                    contentDescription = "插入图片",
+                                    onClick = { insertImageMenuOpen = true },
+                                ) {
+                                    ImageToolGlyph(
+                                        glyph = ImageGlyph.GALLERY,
+                                        color = EditorToolbarInk,
+                                        modifier = Modifier.size(24.dp),
+                                        contentDescription = "插入图片",
+                                    )
+                                }
+                                EditorTitleButton(
+                                    contentDescription = "完成",
+                                    onClick = ::goBack,
+                                ) {
+                                    Text(
+                                        text = "✓",
+                                        color = EditorToolbarInk,
+                                        fontSize = 27.sp,
+                                        fontWeight = FontWeight.Light,
+                                    )
+                                }
                         Box {
                             IconButton(
                                 onClick = { menuOpen = true },
-                                modifier = Modifier.size(40.dp),
+                                modifier = Modifier.size(38.dp),
                             ) {
-                                Icon(Icons.Outlined.MoreVert, contentDescription = "更多")
+                                Icon(
+                                    Icons.Outlined.MoreVert,
+                                    contentDescription = "更多",
+                                    tint = EditorToolbarInk,
+                                )
                             }
                             DropdownMenu(
                                 expanded = menuOpen,
@@ -564,6 +585,15 @@ fun EditorScreen(
                                     onClick = {
                                         menuOpen = false
                                         preview = !preview
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("分享") },
+                                    leadingIcon = { Icon(Icons.Outlined.Share, null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        keyboardController?.hide()
+                                        shareSheetOpen = true
                                     },
                                 )
                                 DropdownMenuItem(
@@ -720,7 +750,8 @@ fun EditorScreen(
                             }
                         }
                     }
-                    Surface(color = EditorPaper, shadowElevation = 1.dp) {
+                    }
+                    Surface(color = paper.paper, shadowElevation = 1.dp) {
                         EditorInfoBar(
                             folderName = currentFolder?.name ?: "全部便签",
                             updatedAt = currentNote?.updatedAt ?: System.currentTimeMillis(),
@@ -743,6 +774,7 @@ fun EditorScreen(
                             },
                         )
                     }
+                }
             }
             }
         },
@@ -761,9 +793,10 @@ fun EditorScreen(
         RuledPaper(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(horizontal = 6.dp)
                 .padding(padding),
-            paperColor = EditorPaper,
-            marginColor = EditorRule.copy(alpha = 0.78f),
+            paperColor = paper.paper,
+            marginColor = paper.rule.copy(alpha = 0.92f),
         ) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val pageHeight = maxHeight
@@ -782,7 +815,7 @@ fun EditorScreen(
                                 var y = step
                                 while (y < size.height) {
                                     drawLine(
-                                        color = EditorRule.copy(alpha = 0.7f),
+                                        color = paper.rule.copy(alpha = 0.72f),
                                         start = Offset(0f, y),
                                         end = Offset(size.width, y),
                                         strokeWidth = 1.1f,
@@ -790,7 +823,7 @@ fun EditorScreen(
                                     y += step
                                 }
                             }
-                            .padding(start = 54.dp, end = 18.dp),
+                            .padding(start = 39.dp, end = 18.dp),
                     ) {
                 if (!preview) {
                     BasicTextField(
@@ -814,7 +847,7 @@ fun EditorScreen(
                                 }
                             },
                         textStyle = TextStyle(
-                            color = EditorInk,
+                            color = paper.ink,
                             fontSize = EditorTextMetrics.titleFontSize,
                             lineHeight = EditorTextMetrics.lineHeight,
                             fontWeight = FontWeight.Bold,
@@ -827,12 +860,12 @@ fun EditorScreen(
                                 keyboardController?.show()
                             },
                         ),
-                        cursorBrush = SolidColor(EditorInk),
+                        cursorBrush = SolidColor(paper.ink),
                         decorationBox = { innerTextField ->
                             if (title.isBlank()) {
                                 Text(
                                     text = "标题",
-                                    color = EditorMutedInk.copy(alpha = 0.55f),
+                                    color = paper.mutedInk.copy(alpha = 0.62f),
                                     fontSize = EditorTextMetrics.titleFontSize,
                                     lineHeight = EditorTextMetrics.lineHeight,
                                     fontWeight = FontWeight.Bold,
@@ -849,7 +882,7 @@ fun EditorScreen(
                         if (editorBody.isBlank()) {
                             Text(
                                 text = "开始记录…",
-                                color = EditorMutedInk.copy(alpha = 0.52f),
+                                color = paper.mutedInk.copy(alpha = 0.58f),
                                 fontSize = EditorTextMetrics.bodyFontSize,
                                 lineHeight = EditorTextMetrics.lineHeight,
                             )
@@ -858,7 +891,7 @@ fun EditorScreen(
                             value = editorBody,
                             onValueChange = ::setBodyWithHistory,
                             controller = documentEditor,
-                            textColor = EditorInk,
+                            textColor = paper.ink,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .focusRequester(bodyFocusRequester),
@@ -914,7 +947,7 @@ fun EditorScreen(
                         text = title.ifBlank { "无标题" },
                         modifier = Modifier
                             .fillMaxWidth(),
-                        color = EditorInk,
+                        color = paper.ink,
                         fontSize = EditorTextMetrics.titleFontSize,
                         lineHeight = EditorTextMetrics.lineHeight,
                         fontWeight = FontWeight.SemiBold,
@@ -1357,6 +1390,41 @@ private fun noteShareText(title: String, body: String): String =
     title.ifBlank { "无标题" } + "\n\n" + AttachmentReferences.plainText(body)
 
 @Composable
+private fun EditorTitleButton(
+    contentDescription: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .size(38.dp)
+            .semantics { this.contentDescription = contentDescription },
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(if (enabled) 1f else 0.35f),
+            contentAlignment = Alignment.Center,
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun UndoRedoGlyph(undo: Boolean) {
+    Text(
+        text = if (undo) "↶" else "↷",
+        color = EditorToolbarInk,
+        fontSize = 25.sp,
+        lineHeight = 28.sp,
+    )
+}
+
+@Composable
 private fun EditorInfoBar(
     folderName: String,
     updatedAt: Long,
@@ -1374,47 +1442,41 @@ private fun EditorInfoBar(
         modifier = Modifier
             .fillMaxWidth()
             .height(lineHeight)
-            .padding(start = 54.dp, end = 18.dp),
+            .padding(start = 39.dp, end = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
             modifier = Modifier
-                .weight(1f)
+                .width(96.dp)
                 .height(24.dp)
-                .border(
-                    width = 1.dp,
-                    color = EditorRule,
-                    shape = RoundedCornerShape(3.dp),
-                )
                 .clickable(onClick = onFolderClick)
-                .padding(horizontal = 6.dp),
+                .padding(horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("▤", color = EditorMutedInk, fontSize = 13.sp)
-            Spacer(Modifier.width(5.dp))
             Text(
                 text = folderName,
                 modifier = Modifier.weight(1f),
                 color = EditorMutedInk,
-                fontSize = 12.sp,
+                fontSize = 12.5.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text("▾", color = EditorMutedInk, fontSize = 11.sp)
         }
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(6.dp))
         Text(
             text = editorTimestamp(updatedAt),
             color = EditorMutedInk,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             maxLines = 1,
         )
         Text(
             text = " | $characterCount",
             color = EditorMutedInk,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             maxLines = 1,
         )
+        Spacer(Modifier.weight(1f))
         IconButton(
             onClick = onStarClick,
             modifier = Modifier.size(28.dp),
@@ -1486,116 +1548,70 @@ private fun EditorFormatToolbar(
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = EditorFormatBar,
-        contentColor = EditorAccent,
-        shadowElevation = 5.dp,
+        contentColor = EditorFormatInk,
+        shadowElevation = 3.dp,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(68.dp)
-                .padding(horizontal = 3.dp),
+                .height(43.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            EditorFormatButton(
+            EditorTextFormatButton(
                 label = "标题",
                 modifier = Modifier.weight(1f),
                 onClick = { onFormat(DocumentFormatAction.HEADING) },
-            ) {
-                Text(
-                    text = "H",
-                    color = EditorAccent,
-                    fontSize = 25.sp,
-                    lineHeight = 25.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            )
             EditorToolbarDivider()
-            EditorFormatButton(
+            EditorTextFormatButton(
                 label = "居中",
                 modifier = Modifier.weight(1f),
                 onClick = { onFormat(DocumentFormatAction.CENTER) },
-            ) {
-                CenterLinesGlyph()
-            }
+            )
             EditorToolbarDivider()
-            EditorFormatButton(
+            EditorTextFormatButton(
                 label = "列表",
                 modifier = Modifier.weight(1f),
                 onClick = { onFormat(DocumentFormatAction.BULLET) },
-            ) {
-                ListGlyph()
-            }
+            )
             EditorToolbarDivider()
-            EditorFormatButton(
+            EditorTextFormatButton(
                 label = "粗体",
                 modifier = Modifier.weight(1f),
                 onClick = { onFormat(DocumentFormatAction.BOLD) },
-            ) {
-                Text(
-                    text = "B",
-                    color = EditorAccent,
-                    fontSize = 25.sp,
-                    lineHeight = 25.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            )
             EditorToolbarDivider()
-            EditorFormatButton(
+            EditorTextFormatButton(
                 label = "引用",
                 modifier = Modifier.weight(1f),
                 onClick = { onFormat(DocumentFormatAction.QUOTE) },
-            ) {
-                Text(
-                    text = "❝",
-                    color = EditorAccent,
-                    fontSize = 25.sp,
-                    lineHeight = 25.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            )
             EditorToolbarDivider()
-            EditorFormatButton(
+            EditorTextFormatButton(
                 label = "待办事项",
                 modifier = Modifier.weight(1.25f),
                 onClick = { onFormat(DocumentFormatAction.TODO) },
-            ) {
-                Text(
-                    text = "☑",
-                    color = EditorAccent,
-                    fontSize = 24.sp,
-                    lineHeight = 25.sp,
-                )
-            }
+            )
         }
     }
 }
 
 @Composable
-private fun EditorFormatButton(
+private fun EditorTextFormatButton(
     label: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
-    glyph: @Composable () -> Unit,
 ) {
-    Column(
+    Box(
         modifier = modifier
-            .height(64.dp)
-            .clickable(onClick = onClick)
-            .padding(top = 6.dp, bottom = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+            .fillMaxHeight()
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier.size(width = 28.dp, height = 28.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            glyph()
-        }
         Text(
             text = label,
-            color = EditorAccent,
-            fontSize = 10.sp,
-            lineHeight = 13.sp,
+            color = EditorFormatInk,
+            fontSize = 13.5.sp,
             maxLines = 1,
         )
     }
@@ -1606,8 +1622,8 @@ private fun EditorToolbarDivider() {
     Box(
         Modifier
             .width(1.dp)
-            .height(42.dp)
-            .background(Color(0xFFD7B976).copy(alpha = 0.7f)),
+            .height(23.dp)
+            .background(Color(0xFFE1D9CE)),
     )
 }
 

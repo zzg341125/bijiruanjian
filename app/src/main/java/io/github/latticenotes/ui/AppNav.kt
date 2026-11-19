@@ -1,21 +1,8 @@
 package io.github.latticenotes.ui
 
 import android.util.Log
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,13 +10,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -47,7 +29,6 @@ import io.github.latticenotes.data.SettingsRepository
 import io.github.latticenotes.update.AppUpdate
 import io.github.latticenotes.update.UpdateManager
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -72,18 +53,6 @@ fun AppNav(
     val lifecycleOwner = LocalLifecycleOwner.current
     var startSearch by remember { mutableStateOf(launchRequest?.destination == "search") }
     var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
-    var syncEvent by remember { mutableStateOf<OnlineSyncManager.SyncEvent?>(null) }
-
-    LaunchedEffect(Unit) {
-        OnlineSyncManager.events.collectLatest { event ->
-            syncEvent = event
-            if (event is OnlineSyncManager.SyncEvent.Finished) {
-                delay(if (event.successful) 1_800 else 3_500)
-                syncEvent = null
-            }
-        }
-    }
-
     LaunchedEffect(settings.autoUpdateCheck) {
         if (!settings.autoUpdateCheck || !UpdateManager.shouldAutoCheck(context)) {
             return@LaunchedEffect
@@ -162,6 +131,7 @@ fun AppNav(
                 EditorScreen(
                     noteId = noteId,
                     repository = repository,
+                    settings = settings,
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -183,60 +153,6 @@ fun AppNav(
             }
         }
 
-        AnimatedVisibility(
-            visible = syncEvent != null,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(top = 66.dp),
-            enter = fadeIn(),
-            exit = fadeOut(),
-        ) {
-            val event = syncEvent
-            if (event != null) {
-                val finished = event as? OnlineSyncManager.SyncEvent.Finished
-                Surface(
-                    shape = CircleShape,
-                    color = Color(0xE658483C),
-                    contentColor = Color.White,
-                    shadowElevation = 5.dp,
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (finished == null) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(15.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Text(
-                                text = if (finished.successful) "✓" else "!",
-                                color = if (finished.successful) {
-                                    Color(0xFFFFD66B)
-                                } else {
-                                    Color(0xFFFFB2A8)
-                                },
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                            )
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = when {
-                                finished == null -> "正在同步…"
-                                finished.successful -> "同步成功"
-                                else -> "同步失败"
-                            },
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
-            }
-        }
     }
 
     availableUpdate?.let { update ->

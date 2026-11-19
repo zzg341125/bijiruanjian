@@ -19,6 +19,7 @@ data class AppSettings(
     val themeMode: String = "system",
     val dynamicColor: Boolean = false,
     val fontScale: Float = 1f,
+    val notePaperStyle: String = "default",
     val appLockEnabled: Boolean = false,
     val pinHash: String = "",
     val pinSalt: String = "",
@@ -34,6 +35,7 @@ class SettingsRepository(private val context: Context) {
         val themeMode = stringPreferencesKey("theme_mode")
         val dynamicColor = booleanPreferencesKey("dynamic_color")
         val fontScale = floatPreferencesKey("font_scale")
+        val notePaperStyle = stringPreferencesKey("note_paper_style")
         val lockEnabled = booleanPreferencesKey("lock_enabled")
         val pinHash = stringPreferencesKey("pin_hash")
         val pinSalt = stringPreferencesKey("pin_salt")
@@ -54,6 +56,7 @@ class SettingsRepository(private val context: Context) {
                 themeMode = preferences[Keys.themeMode] ?: "system",
                 dynamicColor = preferences[Keys.dynamicColor] ?: false,
                 fontScale = (preferences[Keys.fontScale] ?: 1f).coerceIn(0.8f, 1.5f),
+                notePaperStyle = preferences[Keys.notePaperStyle] ?: "default",
                 appLockEnabled = preferences[Keys.lockEnabled] ?: false,
                 pinHash = preferences[Keys.pinHash] ?: "",
                 pinSalt = preferences[Keys.pinSalt] ?: "",
@@ -79,6 +82,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setFontScale(value: Float) {
         context.settingsDataStore.edit { it[Keys.fontScale] = value.coerceIn(0.8f, 1.5f) }
+    }
+
+    suspend fun setNotePaperStyle(value: String) {
+        context.settingsDataStore.edit { it[Keys.notePaperStyle] = value }
     }
 
     suspend fun setDefaultFormat(value: NoteFormat) {

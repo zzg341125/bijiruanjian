@@ -92,8 +92,11 @@ import io.github.latticenotes.data.FolderEntity
 import io.github.latticenotes.data.NoteEntity
 import io.github.latticenotes.data.NoteFormat
 import io.github.latticenotes.data.NotesRepository
+import io.github.latticenotes.data.OnlineSyncManager
 import io.github.latticenotes.util.AttachmentReferences
 import io.github.latticenotes.util.formatListTimestamp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
@@ -157,6 +160,20 @@ fun HomeScreen(
     var moveNote by remember { mutableStateOf<NoteEntity?>(null) }
     var tagNote by remember { mutableStateOf<NoteEntity?>(null) }
     var deleteNote by remember { mutableStateOf<NoteEntity?>(null) }
+    var syncStatus by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        OnlineSyncManager.events.collectLatest { event ->
+            when (event) {
+                OnlineSyncManager.SyncEvent.Started -> syncStatus = "正在同步…"
+                is OnlineSyncManager.SyncEvent.Finished -> {
+                    syncStatus = if (event.successful) "同步成功" else "同步失败"
+                    delay(if (event.successful) 1_800 else 3_000)
+                    syncStatus = null
+                }
+            }
+        }
+    }
 
     LaunchedEffect(initialSearch) {
         if (initialSearch) {
@@ -406,6 +423,14 @@ fun HomeScreen(
                 onQueryChange = { query = it },
                 focusRequester = searchFocus,
             )
+            syncStatus?.let { status ->
+                Text(
+                    text = status,
+                    modifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 5.dp),
+                    color = Color(0x995C3C2A),
+                    fontSize = 12.sp,
+                )
+            }
 
             Box(
                 modifier = Modifier.fillMaxSize(),

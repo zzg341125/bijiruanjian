@@ -6,7 +6,7 @@ Tested on 2026-11-19 with:
 - JDK 21
 - Gradle 8.9
 - Android Gradle Plugin 8.7.3
-- 曲阳便签 `0.11.11` (`versionCode` 11011)
+- 曲阳便签 `0.11.12` (`versionCode` 11012)
 
 ## Automated checks
 
@@ -19,7 +19,7 @@ Tested on 2026-11-19 with:
 
 Result on 2026-11-19:
 
-- 81 unit tests pass with 0 failures and 0 errors.
+- 83 unit tests pass with 0 failures and 0 errors.
 - Lint: 0 errors, 128 warnings (mostly upstream OAF deprecation notices).
 - Debug APK builds and installs.
 - Release build passes R8 minification and produces a 34.9 MB unsigned APK.
@@ -45,7 +45,7 @@ Result on 2026-11-19:
 - Nutstore Link-header pagination follows all `rel="next"` pages on the same server.
 - Remote-imported files are not uploaded again during the same sync.
 - Sync summary reports the actual number of Nutstore directory pages scanned.
-- Local APK versionCode is 11011 for version 0.11.11.
+- Local APK versionCode is 11012 for version 0.11.12.
 - WebDAV folder traversal includes nested subfolders and preserves relative Markdown paths.
 - The download-and-restore action shows the full sync result rather than a fixed success message.
 - Imported notes are written before their attachments, satisfying the SQLite foreign key.
@@ -61,7 +61,7 @@ Result on 2026-11-19:
 - DOCX/XLSX use the embedded Apache-2.0 OAF Office engine on all packaged ABIs.
 - OAF starts as an internal `exported=false` activity and does not require WPS or Microsoft 365.
 - OAF and the host app use separate DataStore files, avoiding a single-process DataStore crash.
-- Back returns from an OAF document or spreadsheet to the originating 曲阳便签 editor.
+- Back returns from an OAF document or spreadsheet directly to the note list.
 - A DOCX edit was saved in place to the original attachment and the updated text was present in `word/document.xml`.
 - An XLSX cell edit was saved in place to the original attachment and the updated value was present in `xl/sharedStrings.xml`.
 - OAF receives the original attachment display name while reading and writing the host app's private file path.
@@ -98,6 +98,15 @@ Result on 2026-11-19:
 - The launcher package resolves to the supplied Smartisan Notes icon for every density bucket.
 - Relative timestamps render as `今天`, Chinese weekday, day count and year-count formats.
 - Long body editing keeps the active caret line above the IME and fixed format toolbar.
+- The editor title bar uses the reference wood toolbar with undo, redo, image insertion,
+  completion and overflow actions.
+- The editor information strip, 42dp ruled-paper lines and 16sp/18sp typography follow the
+  reference dimensions while preserving title-first editing.
+- Settings uses the reference wood background with grouped light list rows.
+- Note paper colour can be selected as light, default, dark or darkest, and the editor updates
+  immediately without leaving the screen.
+- Synchronization no longer opens a floating capsule; status appears inline in the note list and
+  in the WebDAV settings row.
 - WebDAV synchronization emits started, successful and failed status states for both automatic and
   manual synchronization.
 - The reference APK's highest-resolution `560dpi` launcher icon was copied for the installed app
