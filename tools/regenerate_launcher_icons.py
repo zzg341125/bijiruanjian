@@ -8,11 +8,13 @@ RES = ROOT / "app" / "src" / "main" / "res"
 SOURCE = ROOT / "docs" / "quyang-icon-source.png"
 MASTER = RES / "drawable-nodpi" / "quyang_launcher_art.png"
 ADAPTIVE_BACKGROUND = RES / "drawable-nodpi" / "smartisan_notes_launcher.png"
+ADAPTIVE_BACKGROUND_FRAME = RES / "drawable-nodpi" / "quyang_launcher_background.png"
 ADAPTIVE_FOREGROUND = RES / "drawable-nodpi" / "quyang_launcher_foreground.png"
 PREVIEW = ROOT / "docs" / "quyang-icon-preview.png"
 ARTWORK_SCALE = 0.92
 FRAME_HORIZONTAL_STRETCH = 1.16
-ADAPTIVE_ART_SCALE = 0.68
+ADAPTIVE_ART_SCALE = 0.82
+BACKGROUND_COLOR = (251, 247, 237, 255)
 LEGACY_SIZES = {
     "mdpi": 48,
     "hdpi": 72,
@@ -73,13 +75,17 @@ foreground.alpha_composite(
     master.resize((foreground_side, foreground_side), Image.Resampling.LANCZOS),
     (foreground_inset, foreground_inset),
 )
+background = Image.new("RGBA", master.size, BACKGROUND_COLOR)
+legacy = background.copy()
+legacy.alpha_composite(master)
 foreground.save(ADAPTIVE_FOREGROUND, format="PNG", optimize=True)
-master.save(MASTER, format="PNG", optimize=True)
-master.save(ADAPTIVE_BACKGROUND, format="PNG", optimize=True)
-master.save(PREVIEW, format="PNG", optimize=True)
+background.save(ADAPTIVE_BACKGROUND_FRAME, format="PNG", optimize=True)
+legacy.save(MASTER, format="PNG", optimize=True)
+legacy.save(ADAPTIVE_BACKGROUND, format="PNG", optimize=True)
+legacy.save(PREVIEW, format="PNG", optimize=True)
 
 for density, size in LEGACY_SIZES.items():
-    icon = master.resize((size, size), Image.Resampling.LANCZOS)
+    icon = legacy.resize((size, size), Image.Resampling.LANCZOS)
     output_dir = RES / f"mipmap-{density}"
     icon.save(output_dir / "ic_launcher.png", format="PNG", optimize=True)
     round_mask = Image.new("L", (size, size), 0)
