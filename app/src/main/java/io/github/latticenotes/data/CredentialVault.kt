@@ -16,19 +16,41 @@ class CredentialVault(context: Context) {
     private val alias = "quyang_notes_webdav"
 
     fun saveWebDavPassword(password: String) {
-        if (password.isBlank()) return
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key())
-        val encrypted = cipher.doFinal(password.toByteArray(Charsets.UTF_8))
-        preferences.edit()
-            .putString("webdav_iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
-            .putString("webdav_ciphertext", Base64.encodeToString(encrypted, Base64.NO_WRAP))
-            .apply()
+        preferences.edit().apply {
+            if (password.isBlank()) {
+                remove(PLAIN_PASSWORD_KEY)
+            } else {
+                putString(PLAIN_PASSWORD_KEY, password)
+            }
+            remove(LEGACY_IV_KEY)
+            remove(LEGACY_CIPHERTEXT_KEY)
+        }.apply()
+        deleteLegacyKey()
     }
 
     fun loadWebDavPassword(): String {
-        val iv = preferences.getString("webdav_iv", null) ?: return ""
-        val ciphertext = preferences.getString("webdav_ciphertext", null) ?: return ""
+        if (preferences.contains(PLAIN_PASSWORD_KEY)) {
+            return preferences.getString(PLAIN_PASSWORD_KEY, "").orEmpty()
+        }
+        return decryptLegacyPassword()
+    }
+
+    fun loadWebDavPasswordOrDefault(): String {
+        val password = loadWebDavPassword()
+        if (!preferences.contains(PLAIN_PASSWORD_KEY) && password.isNotBlank()) {
+            saveWebDavPassword(password)
+        }
+        return password.ifBlank { BuildConfig.DEFAULT_WEBDAV_PASSWORD }
+    }
+
+    fun clearWebDavPassword() {
+        preferences.edit().clear().apply()
+        deleteLegacyKey()
+    }
+
+    private fun decryptLegacyPassword(): String {
+        val iv = preferences.getString(LEGACY_IV_KEY, null) ?: return ""
+        val ciphertext = preferences.getString(LEGACY_CIPHERTEXT_KEY, null) ?: return ""
         return runCatching {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(
@@ -43,15 +65,7 @@ class CredentialVault(context: Context) {
         }.getOrDefault("")
     }
 
-    fun loadWebDavPasswordOrDefault(): String =
-        loadWebDavPassword().ifBlank { BuildConfig.DEFAULT_WEBDAV_PASSWORD }
-
-    fun hasWebDavPassword(): Boolean =
-        !preferences.getString("webdav_ciphertext", null).isNullOrBlank() ||
-            BuildConfig.DEFAULT_WEBDAV_PASSWORD.isNotBlank()
-
-    fun clearWebDavPassword() {
-        preferences.edit().clear().apply()
+    private fun deleteLegacyKey() {
         runCatching {
             KeyStore.getInstance("AndroidKeyStore").apply {
                 load(null)
@@ -80,5 +94,11 @@ class CredentialVault(context: Context) {
                 .build(),
         )
         return generator.generateKey()
+    }
+
+    companion object {
+        private const val PLAIN_PASSWORD_KEY = "webdav_password"
+        private const val LEGACY_IV_KEY = "webdav_iv"
+        private const val LEGACY_CIPHERTEXT_KEY = "webdav_ciphertext"
     }
 }

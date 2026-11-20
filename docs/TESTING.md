@@ -38,6 +38,10 @@ Result on 2026-11-19:
 - Batch deletion protection blocks removal of more than half of a vault with at least five files.
 - WebDAV input containing BOM, zero-width characters, or surrounding whitespace is normalized before parsing.
 - WebDAV URLs are validated and encoded through OkHttp `HttpUrl`.
+- WebDAV address, username and password are persisted together and all three fields are
+  prefilled when reopening the configuration dialog.
+- WebDAV passwords use plaintext storage in app-private preferences as configured by the user;
+  legacy encrypted passwords are migrated on first read and the old ciphertext/key are removed.
 - A concrete WebDAV folder such as `/dav/biji/` is synced directly.
 - Only the Jianguoyun `/dav/` root creates the dedicated `曲阳便签` child folder.
 - Jianguoyun may return HTTP 400 for a missing child folder; the client creates it with MKCOL and retries PROPFIND.

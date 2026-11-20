@@ -463,7 +463,7 @@ fun SettingsScreen(
         WebDavConfigDialog(
             initialUrl = settings.webDavUrl,
             initialUsername = settings.webDavUsername,
-            passwordConfigured = credentialVault.hasWebDavPassword(),
+            initialPassword = credentialVault.loadWebDavPasswordOrDefault(),
             onDismiss = { webDavDialog = false },
             onSave = { url, username, password ->
                 scope.launch {
@@ -977,14 +977,14 @@ private const val MAX_BACKUP_BYTES = 128 * 1024 * 1024
 private fun WebDavConfigDialog(
     initialUrl: String,
     initialUsername: String,
-    passwordConfigured: Boolean,
+    initialPassword: String,
     onDismiss: () -> Unit,
     onSave: (String, String, String) -> Unit,
     onClear: () -> Unit,
 ) {
     var url by remember { mutableStateOf(initialUrl) }
     var username by remember { mutableStateOf(initialUsername) }
-    var password by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf(initialPassword) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("WebDAV 在线备份") },
@@ -1013,8 +1013,9 @@ private fun WebDavConfigDialog(
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = {
-                        Text(if (passwordConfigured) "密码（留空则不修改）" else "密码")
+                    label = { Text("密码") },
+                    supportingText = {
+                        Text("地址、用户名和密码会保存在本机；密码按你的设置以明文保存。")
                     },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,

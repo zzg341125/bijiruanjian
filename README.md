@@ -82,6 +82,7 @@ app/build/outputs/apk/debug/app-debug.apk
 - 应用不含广告、遥测或账号 SDK。
 - 导出操作由 Android 系统文件选择器授权。
 - PIN 以带随机盐的 PBKDF2 哈希保存，不保存明文。
+- WebDAV 地址、用户名和密码保存在应用私有数据中；密码按用户要求以明文保存。
 - 附件复制到应用私有目录，不请求宽泛存储权限。
 
 ### 坚果云 WebDAV
