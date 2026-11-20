@@ -75,10 +75,9 @@ object ShareImage {
             bodyPaint = bodyPaint,
         )
 
-        val footerHeight = 110
         val itemHeights = items.sumOf { it.height }
         val itemGaps = (items.size - 1).coerceAtLeast(0) * 18
-        val height = (horizontal + titleLayout.height + 52 + itemHeights + itemGaps + footerHeight)
+        val height = (horizontal + titleLayout.height + 52 + itemHeights + itemGaps + horizontal)
             .coerceIn(480, 18_000)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -128,18 +127,6 @@ object ShareImage {
             }
         }
         canvas.restore()
-
-        val footerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(69, 92, 80)
-            textSize = 25f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-        canvas.drawText(
-            "曲阳便签",
-            horizontal.toFloat(),
-            (height - 44).toFloat(),
-            footerPaint,
-        )
 
         val directory = File(context.cacheDir, "shared").apply { mkdirs() }
         val output = File(directory, "note-${System.currentTimeMillis()}.png")

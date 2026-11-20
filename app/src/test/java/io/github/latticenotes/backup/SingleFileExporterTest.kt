@@ -32,5 +32,7 @@ class SingleFileExporterTest {
         assertTrue(html.contains("照片如下"))
         assertTrue(html.contains("data:image/png;base64,aGVsbG8="))
         assertFalse(html.contains("quyang-attachment://7"))
+        assertFalse(html.contains("<footer>"))
+        assertFalse(html.contains("曲阳便签"))
     }
 }

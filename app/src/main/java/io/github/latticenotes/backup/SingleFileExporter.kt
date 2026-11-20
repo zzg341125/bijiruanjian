@@ -1,33 +1,15 @@
 package io.github.latticenotes.backup
 
-import android.content.Context
-import android.graphics.Bitmap
-import androidx.core.graphics.drawable.toBitmap
-import io.github.latticenotes.R
 import io.github.latticenotes.data.AttachmentEntity
 import io.github.latticenotes.util.AttachmentReferences
 import io.github.latticenotes.util.displayCaption
 import io.github.latticenotes.util.isImageAttachment
-import java.io.ByteArrayOutputStream
-import java.util.Base64
 
 object SingleFileExporter {
-    fun appIconDataUri(context: Context): String? = runCatching {
-        val bitmap = context.getDrawable(R.drawable.quyang_launcher_art)
-            ?.toBitmap(width = 256, height = 256)
-            ?: return null
-        val output = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
-        bitmap.recycle()
-        "data:image/png;base64," +
-            Base64.getEncoder().encodeToString(output.toByteArray())
-    }.getOrNull()
-
     fun toHtml(
         title: String,
         body: String,
         attachments: List<AttachmentEntity>,
-        iconDataUri: String? = null,
     ): String {
         val safeTitle = escape(title.ifBlank { "无标题" })
         fun renderAttachment(attachment: AttachmentEntity): String {
@@ -95,13 +77,6 @@ object SingleFileExporter {
                   border-left: 46px solid #e7dcc8;
                   box-shadow: 0 0 24px rgba(65,48,30,.2);
                 }
-                .brand { display:flex; align-items:center; gap:14px; color:#625545; margin-bottom:32px; }
-                .brand-icon {
-                  width: 52px;
-                  height: 52px;
-                  flex: none;
-                  object-fit: contain;
-                }
                 h1 { font-size: 34px; line-height: 1.35; margin: 0 0 30px; }
                 .body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 19px; line-height: 32px; }
                 figure { margin: 32px 0; }
@@ -109,7 +84,6 @@ object SingleFileExporter {
                 figure img { width:88%; margin-left:auto; margin-right:auto; }
                 figcaption, .missing { color:#796e60; font-size:14px; }
                 .file a { color:#9b592d; }
-                footer { margin-top:56px; color:#8a7b67; font-size:13px; }
                 @media (max-width:600px) {
                   main { padding:32px 24px 56px 42px; border-left-width:24px; }
                   h1 { font-size:28px; }
@@ -118,16 +92,9 @@ object SingleFileExporter {
             </head>
             <body>
               <main>
-                <div class="brand">
-                  ${if (iconDataUri != null) {
-                      "<img class=\"brand-icon\" src=\"$iconDataUri\" alt=\"曲阳便签\">"
-                  } else ""}
-                  <strong>曲阳便签 · 单文件</strong>
-                </div>
                 <h1>$safeTitle</h1>
                 <div class="body">$renderedBody</div>
                 $sections
-                <footer>由曲阳便签导出 · 图片和附件已嵌入此 HTML 文件</footer>
               </main>
             </body>
             </html>

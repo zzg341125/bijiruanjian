@@ -502,7 +502,6 @@ fun EditorScreen(
                         title = title,
                         body = body,
                         attachments = exportedAttachments,
-                        iconDataUri = SingleFileExporter.appIconDataUri(context),
                     )
                     context.contentResolver.openOutputStream(uri)
                         ?.bufferedWriter()
@@ -821,7 +820,7 @@ fun EditorScreen(
                                     onClick = {
                                         menuOpen = false
                                         singleFileExporter.launch(
-                                            "${title.ifBlank { "曲阳便签" }}.html",
+                                            "${title.ifBlank { "无标题" }}.html",
                                         )
                                     },
                                 )
@@ -1166,7 +1165,12 @@ fun EditorScreen(
                 onClose = { shareSheetOpen = false },
                 onCopyText = {
                     context.getSystemService(ClipboardManager::class.java)
-                        .setPrimaryClip(ClipData.newPlainText("曲阳便签", shareText))
+                        .setPrimaryClip(
+                            ClipData.newPlainText(
+                                title.ifBlank { "无标题" },
+                                shareText,
+                            ),
+                        )
                     shareSheetOpen = false
                     Toast.makeText(context, "文字已复制", Toast.LENGTH_SHORT).show()
                 },
@@ -1199,7 +1203,7 @@ fun EditorScreen(
                                 Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")).apply {
                                     putExtra(
                                         Intent.EXTRA_SUBJECT,
-                                        title.ifBlank { "曲阳便签" },
+                                        title.ifBlank { "无标题" },
                                     )
                                     putExtra(Intent.EXTRA_TEXT, shareText)
                                 },
