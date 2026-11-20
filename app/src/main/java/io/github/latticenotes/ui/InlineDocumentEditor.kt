@@ -37,8 +37,10 @@ fun InlineDocumentEditor(
     textColor: Color,
     modifier: Modifier = Modifier,
     onFocused: () -> Unit = {},
+    onLineHeightChanged: (Float) -> Unit = {},
 ) {
     val currentOnValueChange by rememberUpdatedState(onValueChange)
+    val currentOnLineHeightChanged by rememberUpdatedState(onLineHeightChanged)
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val interactionSource = remember { MutableInteractionSource() }
     val density = LocalDensity.current
@@ -92,7 +94,12 @@ fun InlineDocumentEditor(
         cursorBrush = SolidColor(textColor),
         interactionSource = interactionSource,
         visualTransformation = controller.visualTransformation,
-        onTextLayout = { latestLayout = it },
+        onTextLayout = { layout ->
+            latestLayout = layout
+            if (layout.lineCount > 0) {
+                currentOnLineHeightChanged(layout.getLineBottom(0) - layout.getLineTop(0))
+            }
+        },
         maxLines = Int.MAX_VALUE,
     )
 }

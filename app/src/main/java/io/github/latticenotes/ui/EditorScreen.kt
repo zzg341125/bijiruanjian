@@ -87,6 +87,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -160,6 +161,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Calendar
 import kotlin.math.abs
+import kotlin.math.ceil
 
 private val EditorToolbarInk = Color(0xFFFFFCF7)
 private val EditorAccent = Color(0xFFC47B28)
@@ -525,7 +527,13 @@ fun EditorScreen(
     val documentBlocks = remember(body) {
         AttachmentReferences.documentBlocks(body)
     }
-    val editorLineSpacing = EditorTextMetrics.lineHeightDp(LocalDensity.current.fontScale)
+    val editorDensity = LocalDensity.current
+    val editorLineSpacing = EditorTextMetrics.lineHeightDp(editorDensity.fontScale)
+    var editorRenderedLineHeightPx by remember(editorLineSpacing) {
+        mutableFloatStateOf(
+            ceil(with(editorDensity) { editorLineSpacing.toPx() }),
+        )
+    }
     val paperStyle = NotePaperStyle.fromStorage(settings.notePaperStyle)
     val paper = notePaperPalette(paperStyle)
 
@@ -896,7 +904,7 @@ fun EditorScreen(
                             .fillMaxWidth()
                             .heightIn(min = pageHeight)
                             .drawBehind {
-                                val step = editorLineSpacing.toPx()
+                                val step = editorRenderedLineHeightPx
                                 if (step <= 0f) return@drawBehind
                                 var y = step
                                 while (y < size.height) {
@@ -947,6 +955,12 @@ fun EditorScreen(
                                 keyboardController?.show()
                             },
                         ),
+                        onTextLayout = { layout ->
+                            if (layout.lineCount > 0) {
+                                editorRenderedLineHeightPx =
+                                    layout.getLineBottom(0) - layout.getLineTop(0)
+                            }
+                        },
                         cursorBrush = SolidColor(paper.ink),
                         decorationBox = { innerTextField ->
                             if (title.isBlank()) {
@@ -1073,6 +1087,9 @@ fun EditorScreen(
                                             modifier = editorModifier,
                                             onFocused = {
                                                 activeDocumentBlockKey = block.key
+                                            },
+                                            onLineHeightChanged = {
+                                                editorRenderedLineHeightPx = it
                                             },
                                         )
                                     }
