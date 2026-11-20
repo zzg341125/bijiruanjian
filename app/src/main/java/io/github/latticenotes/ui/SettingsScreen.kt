@@ -1017,7 +1017,6 @@ private fun WebDavConfigDialog(
                     supportingText = {
                         Text("地址、用户名和密码会保存在本机；密码按你的设置以明文保存。")
                     },
-                    visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                 )
             }
