@@ -11,7 +11,8 @@ ADAPTIVE_BACKGROUND = RES / "drawable-nodpi" / "smartisan_notes_launcher.png"
 ADAPTIVE_FOREGROUND = RES / "drawable-nodpi" / "quyang_launcher_foreground.png"
 PREVIEW = ROOT / "docs" / "quyang-icon-preview.png"
 ARTWORK_SCALE = 0.92
-FRAME_HORIZONTAL_STRETCH = 1.09
+FRAME_HORIZONTAL_STRETCH = 1.16
+ADAPTIVE_ART_SCALE = 0.68
 LEGACY_SIZES = {
     "mdpi": 48,
     "hdpi": 72,
@@ -65,7 +66,13 @@ def square_frame(icon: Image.Image) -> Image.Image:
 
 
 master = square_frame(transparent_square_icon(Image.open(SOURCE)))
-foreground = master.copy()
+foreground = Image.new("RGBA", master.size, (0, 0, 0, 0))
+foreground_side = round(master.width * ADAPTIVE_ART_SCALE)
+foreground_inset = (foreground.width - foreground_side) // 2
+foreground.alpha_composite(
+    master.resize((foreground_side, foreground_side), Image.Resampling.LANCZOS),
+    (foreground_inset, foreground_inset),
+)
 foreground.save(ADAPTIVE_FOREGROUND, format="PNG", optimize=True)
 master.save(MASTER, format="PNG", optimize=True)
 master.save(ADAPTIVE_BACKGROUND, format="PNG", optimize=True)
