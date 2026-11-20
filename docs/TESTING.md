@@ -6,7 +6,7 @@ Tested on 2026-11-20 with:
 - JDK 21
 - Gradle 8.9
 - Android Gradle Plugin 8.7.3
-- 曲阳便签 `0.11.15` (`versionCode` 11015)
+- 曲阳便签 `0.11.16` (`versionCode` 11016)
 
 ## Automated checks
 
@@ -49,7 +49,7 @@ Result on 2026-11-19:
 - Nutstore Link-header pagination follows all `rel="next"` pages on the same server.
 - Remote-imported files are not uploaded again during the same sync.
 - Sync summary reports the actual number of Nutstore directory pages scanned.
-- Local APK versionCode is 11015 for version 0.11.15.
+- Local APK versionCode is 11016 for version 0.11.16.
 - WebDAV folder traversal includes nested subfolders and preserves relative Markdown paths.
 - The download-and-restore action shows the full sync result rather than a fixed success message.
 - Imported notes are written before their attachments, satisfying the SQLite foreign key.
