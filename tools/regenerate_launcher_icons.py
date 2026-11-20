@@ -8,10 +8,11 @@ RES = ROOT / "app" / "src" / "main" / "res"
 SOURCE = ROOT / "docs" / "quyang-icon-source.png"
 MASTER = RES / "drawable-nodpi" / "quyang_launcher_art.png"
 ADAPTIVE_BACKGROUND = RES / "drawable-nodpi" / "smartisan_notes_launcher.png"
+ADAPTIVE_FOREGROUND = RES / "drawable-nodpi" / "quyang_launcher_foreground.png"
 PREVIEW = ROOT / "docs" / "quyang-icon-preview.png"
-FRAME_TOP = (247, 222, 174)
-FRAME_BOTTOM = (211, 168, 99)
-ARTWORK_SCALE = 0.72
+FRAME_TOP = (244, 207, 120)
+FRAME_BOTTOM = (215, 167, 76)
+ARTWORK_SCALE = 0.92
 LEGACY_SIZES = {
     "mdpi": 48,
     "hdpi": 72,
@@ -61,26 +62,32 @@ def crop_rounded_icon(image: Image.Image) -> Image.Image:
     return square.resize((1024, 1024), Image.Resampling.LANCZOS)
 
 
-def add_even_yellow_frame(artwork: Image.Image) -> Image.Image:
-    """Keep the existing note artwork, adding a full-bleed frame for launcher masks."""
-    framed = Image.new("RGBA", (1024, 1024), (*FRAME_TOP, 255))
-    draw = ImageDraw.Draw(framed)
-    for y in range(framed.height):
-        amount = y / (framed.height - 1)
+def yellow_background() -> Image.Image:
+    background = Image.new("RGBA", (1024, 1024), (*FRAME_TOP, 255))
+    draw = ImageDraw.Draw(background)
+    for y in range(background.height):
+        amount = y / (background.height - 1)
         color = tuple(
             round(FRAME_TOP[index] * (1 - amount) + FRAME_BOTTOM[index] * amount)
             for index in range(3)
         )
-        draw.line((0, y, framed.width, y), fill=(*color, 255))
+        draw.line((0, y, background.width, y), fill=(*color, 255))
+    return background
 
-    side = round(framed.width * ARTWORK_SCALE)
-    inset = (framed.width - side) // 2
+
+def centered_foreground(artwork: Image.Image) -> Image.Image:
+    foreground = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
+    side = round(foreground.width * ARTWORK_SCALE)
+    inset = (foreground.width - side) // 2
     resized = artwork.resize((side, side), Image.Resampling.LANCZOS)
-    framed.alpha_composite(resized, (inset, inset))
-    return framed
+    foreground.alpha_composite(resized, (inset, inset))
+    return foreground
 
 
-master = add_even_yellow_frame(crop_rounded_icon(Image.open(SOURCE)))
+foreground = centered_foreground(crop_rounded_icon(Image.open(SOURCE)))
+master = yellow_background()
+master.alpha_composite(foreground)
+foreground.save(ADAPTIVE_FOREGROUND, format="PNG", optimize=True)
 master.save(MASTER, format="PNG", optimize=True)
 master.save(ADAPTIVE_BACKGROUND, format="PNG", optimize=True)
 master.save(PREVIEW, format="PNG", optimize=True)
