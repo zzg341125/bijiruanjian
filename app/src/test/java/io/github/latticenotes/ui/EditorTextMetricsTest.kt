@@ -1,6 +1,7 @@
 package io.github.latticenotes.ui
 
 import org.junit.Assert.assertEquals
+import androidx.compose.ui.text.style.LineHeightStyle
 import org.junit.Test
 
 class EditorTextMetricsTest {
@@ -20,6 +21,18 @@ class EditorTextMetricsTest {
             63f,
             EditorTextMetrics.lineHeightDp(1.5f).value,
             0.001f,
+        )
+    }
+
+    @Test
+    fun editorTextIsCenteredInsideEachRuledLine() {
+        assertEquals(
+            LineHeightStyle.Alignment.Center,
+            EditorTextMetrics.lineHeightStyle.alignment,
+        )
+        assertEquals(
+            LineHeightStyle.Trim.None,
+            EditorTextMetrics.lineHeightStyle.trim,
         )
     }
 }

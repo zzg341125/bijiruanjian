@@ -19,7 +19,7 @@ Tested on 2026-11-20 with:
 
 Result on 2026-11-19:
 
-- 91 unit tests pass with 0 failures and 0 errors.
+- 92 unit tests pass with 0 failures and 0 errors.
 - Lint: 0 errors, 127 warnings (mostly upstream OAF deprecation notices).
 - Debug APK builds and installs.
 - Release build passes R8 minification and produces a 34.9 MB unsigned APK.
@@ -104,6 +104,8 @@ Result on 2026-11-19:
   completion and overflow actions.
 - The editor information strip, 42dp ruled-paper lines and 16sp/18sp typography follow the
   reference dimensions while preserving title-first editing.
+- Title and body glyphs are vertically centered inside each ruled-paper line cell at every
+  supported font scale.
 - Settings uses the reference wood background with grouped light list rows.
 - Note paper colour can be selected as light, default, dark or darkest, and the editor updates
   immediately without leaving the screen.

@@ -87,6 +87,7 @@ fun InlineDocumentEditor(
             color = textColor,
             fontSize = EditorTextMetrics.bodyFontSize,
             lineHeight = EditorTextMetrics.lineHeight,
+            lineHeightStyle = EditorTextMetrics.lineHeightStyle,
         ),
         cursorBrush = SolidColor(textColor),
         interactionSource = interactionSource,

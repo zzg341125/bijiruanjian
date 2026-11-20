@@ -937,6 +937,7 @@ fun EditorScreen(
                             color = paper.ink,
                             fontSize = EditorTextMetrics.titleFontSize,
                             lineHeight = EditorTextMetrics.lineHeight,
+                            lineHeightStyle = EditorTextMetrics.lineHeightStyle,
                             fontWeight = FontWeight.Bold,
                         ),
                         singleLine = false,
@@ -952,10 +953,13 @@ fun EditorScreen(
                             if (title.isBlank()) {
                                 Text(
                                     text = "标题",
-                                    color = paper.mutedInk.copy(alpha = 0.62f),
-                                    fontSize = EditorTextMetrics.titleFontSize,
-                                    lineHeight = EditorTextMetrics.lineHeight,
-                                    fontWeight = FontWeight.Bold,
+                                    style = TextStyle(
+                                        color = paper.mutedInk.copy(alpha = 0.62f),
+                                        fontSize = EditorTextMetrics.titleFontSize,
+                                        lineHeight = EditorTextMetrics.lineHeight,
+                                        lineHeightStyle = EditorTextMetrics.lineHeightStyle,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
                                 )
                             }
                             innerTextField()
@@ -1051,9 +1055,13 @@ fun EditorScreen(
                                         if (bodyIsBlank && firstTextBlock) {
                                             Text(
                                                 text = "开始记录…",
-                                                color = paper.mutedInk.copy(alpha = 0.58f),
-                                                fontSize = EditorTextMetrics.bodyFontSize,
-                                                lineHeight = EditorTextMetrics.lineHeight,
+                                                style = TextStyle(
+                                                    color = paper.mutedInk.copy(alpha = 0.58f),
+                                                    fontSize = EditorTextMetrics.bodyFontSize,
+                                                    lineHeight = EditorTextMetrics.lineHeight,
+                                                    lineHeightStyle =
+                                                        EditorTextMetrics.lineHeightStyle,
+                                                ),
                                             )
                                         }
                                         InlineDocumentEditor(
