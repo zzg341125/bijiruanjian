@@ -7,7 +7,11 @@ ROOT = Path(__file__).resolve().parents[1]
 RES = ROOT / "app" / "src" / "main" / "res"
 SOURCE = ROOT / "docs" / "quyang-icon-source.png"
 MASTER = RES / "drawable-nodpi" / "quyang_launcher_art.png"
+ADAPTIVE_BACKGROUND = RES / "drawable-nodpi" / "smartisan_notes_launcher.png"
 PREVIEW = ROOT / "docs" / "quyang-icon-preview.png"
+FRAME_TOP = (247, 222, 174)
+FRAME_BOTTOM = (211, 168, 99)
+ARTWORK_SCALE = 0.72
 LEGACY_SIZES = {
     "mdpi": 48,
     "hdpi": 72,
@@ -57,12 +61,36 @@ def crop_rounded_icon(image: Image.Image) -> Image.Image:
     return square.resize((1024, 1024), Image.Resampling.LANCZOS)
 
 
-master = crop_rounded_icon(Image.open(SOURCE))
+def add_even_yellow_frame(artwork: Image.Image) -> Image.Image:
+    """Keep the existing note artwork, adding a full-bleed frame for launcher masks."""
+    framed = Image.new("RGBA", (1024, 1024), (*FRAME_TOP, 255))
+    draw = ImageDraw.Draw(framed)
+    for y in range(framed.height):
+        amount = y / (framed.height - 1)
+        color = tuple(
+            round(FRAME_TOP[index] * (1 - amount) + FRAME_BOTTOM[index] * amount)
+            for index in range(3)
+        )
+        draw.line((0, y, framed.width, y), fill=(*color, 255))
+
+    side = round(framed.width * ARTWORK_SCALE)
+    inset = (framed.width - side) // 2
+    resized = artwork.resize((side, side), Image.Resampling.LANCZOS)
+    framed.alpha_composite(resized, (inset, inset))
+    return framed
+
+
+master = add_even_yellow_frame(crop_rounded_icon(Image.open(SOURCE)))
 master.save(MASTER, format="PNG", optimize=True)
+master.save(ADAPTIVE_BACKGROUND, format="PNG", optimize=True)
 master.save(PREVIEW, format="PNG", optimize=True)
 
 for density, size in LEGACY_SIZES.items():
     icon = master.resize((size, size), Image.Resampling.LANCZOS)
     output_dir = RES / f"mipmap-{density}"
     icon.save(output_dir / "ic_launcher.png", format="PNG", optimize=True)
-    icon.save(output_dir / "ic_launcher_round.png", format="PNG", optimize=True)
+    round_mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(round_mask).ellipse((0, 0, size - 1, size - 1), fill=255)
+    round_icon = icon.copy()
+    round_icon.putalpha(round_mask)
+    round_icon.save(output_dir / "ic_launcher_round.png", format="PNG", optimize=True)
