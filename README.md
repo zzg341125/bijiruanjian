@@ -111,8 +111,8 @@ app/build/outputs/apk/debug/app-debug.apk
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.11.21
-git push origin v0.11.21
+git tag v0.11.22
+git push origin v0.11.22
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。

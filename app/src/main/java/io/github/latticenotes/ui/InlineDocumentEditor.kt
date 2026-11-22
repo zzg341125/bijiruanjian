@@ -135,7 +135,12 @@ fun InlineDocumentEditor(
                             .originalToTransformed(
                                 fieldValue.selection.end.coerceIn(0, fieldValue.text.length),
                             )
-                            .coerceIn(0, transformed.text.length)
+                            .let {
+                                EditorTextMetrics.clampCursorOffset(
+                                    it,
+                                    layout.layoutInput.text.length,
+                                )
+                            }
                         val line = layout.getLineForOffset(cursorOffset)
                         val lineTop = layout.getLineTop(line)
                         val lineBottom = layout.getLineBottom(line)

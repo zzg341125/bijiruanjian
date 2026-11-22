@@ -42,4 +42,11 @@ class EditorTextMetricsTest {
         assertEquals(12.8f, EditorTextMetrics.cursorHeightDp(0.8f).value, 0.001f)
         assertEquals(24f, EditorTextMetrics.cursorHeightDp(1.5f).value, 0.001f)
     }
+
+    @Test
+    fun cursorOffsetStaysInsideTheLatestTextLayout() {
+        assertEquals(1, EditorTextMetrics.clampCursorOffset(2, 1))
+        assertEquals(0, EditorTextMetrics.clampCursorOffset(-1, 3))
+        assertEquals(3, EditorTextMetrics.clampCursorOffset(3, 3))
+    }
 }

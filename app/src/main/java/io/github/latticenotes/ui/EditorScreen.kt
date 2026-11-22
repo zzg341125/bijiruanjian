@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -2226,6 +2227,7 @@ private fun EmbeddedDocumentImage(
     onMove: (Int) -> Unit,
     onDelete: (AttachmentEntity) -> Unit,
 ) {
+    var imageAspectRatio by remember(attachment.uri) { mutableStateOf(4f / 3f) }
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -2245,19 +2247,29 @@ private fun EmbeddedDocumentImage(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 120.dp, max = 380.dp)
+                        .aspectRatio(imageAspectRatio)
                         .clip(RoundedCornerShape(3.dp)),
                 ) {
                     AsyncImage(
                         model = File(Uri.parse(attachment.uri).path.orEmpty()),
                         contentDescription = attachment.displayCaption(),
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 120.dp, max = 380.dp)
+                            .fillMaxSize()
                             .clickable {
                                 if (editable) onSelect(attachment) else onPreview(attachment)
                             },
-                        contentScale = ContentScale.Crop,
+                        contentScale = ContentScale.FillWidth,
+                        onSuccess = { state ->
+                            val size = state.painter.intrinsicSize
+                            if (
+                                size.width.isFinite() &&
+                                size.height.isFinite() &&
+                                size.width > 0f &&
+                                size.height > 0f
+                            ) {
+                                imageAspectRatio = size.width / size.height
+                            }
+                        },
                     )
                 }
                 if (attachment.caption.isNotBlank()) {
