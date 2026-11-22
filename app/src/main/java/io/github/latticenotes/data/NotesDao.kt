@@ -11,11 +11,19 @@ import kotlinx.coroutines.flow.Flow
 interface NotesDao {
     @Query(
         """
-        SELECT * FROM notes
+        SELECT id, title, format, folderId, tags, color, pinned, starred, trashed,
+               createdAt, updatedAt, deletedAt, reminderAt, syncAsBinary,
+               CASE WHEN instr(body, 'quyang-attachment://') > 0 THEN 1 ELSE 0 END AS hasImage,
+               CASE WHEN :query = ''
+                         OR title LIKE '%' || :query || '%' COLLATE NOCASE
+                         OR body LIKE '%' || :query || '%' COLLATE NOCASE
+                         OR tags LIKE '%' || :query || '%' COLLATE NOCASE
+                    THEN 1 ELSE 0 END AS matchesQuery
+        FROM notes
         ORDER BY pinned DESC, updatedAt DESC
         """,
     )
-    fun observeNotes(): Flow<List<NoteEntity>>
+    fun observeNoteList(query: String): Flow<List<NoteListItem>>
 
     @Query("SELECT * FROM notes WHERE id = :id")
     fun observeNote(id: Long): Flow<NoteEntity?>

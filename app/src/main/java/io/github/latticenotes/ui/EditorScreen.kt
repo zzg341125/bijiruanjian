@@ -114,7 +114,10 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.layout.ContentScale
@@ -135,6 +138,7 @@ import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import coil.imageLoader
 import io.github.latticenotes.R
 import io.github.latticenotes.backup.SingleFileExporter
 import io.github.latticenotes.data.AppSettings
@@ -218,6 +222,12 @@ fun EditorScreen(
     }
     val bodyFocusRequester = remember(noteId) { FocusRequester() }
     val documentScroll = remember(noteId) { ScrollState(0) }
+
+    DisposableEffect(noteId) {
+        onDispose {
+            context.imageLoader.memoryCache?.clear()
+        }
+    }
 
     val activity = context.findActivity()
     DisposableEffect(activity) {
@@ -2227,7 +2237,25 @@ private fun EmbeddedDocumentImage(
     onMove: (Int) -> Unit,
     onDelete: (AttachmentEntity) -> Unit,
 ) {
-    var imageAspectRatio by remember(attachment.uri) { mutableStateOf(4f / 3f) }
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    val preloadDistancePx = with(density) { 600.dp.toPx() }
+    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+    var nearViewport by remember(attachment.uri) { mutableStateOf(false) }
+    var imageAspectRatio by remember(attachment.uri) { mutableFloatStateOf(4f / 3f) }
+    LaunchedEffect(attachment.uri) {
+        val measuredRatio: Float? = withContext(Dispatchers.IO) {
+            val path = Uri.parse(attachment.uri).path ?: return@withContext null
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(path, bounds)
+            if (bounds.outWidth > 0 && bounds.outHeight > 0) {
+                bounds.outWidth.toFloat() / bounds.outHeight
+            } else {
+                null
+            }
+        }
+        if (measuredRatio != null) imageAspectRatio = measuredRatio
+    }
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -2248,29 +2276,43 @@ private fun EmbeddedDocumentImage(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(imageAspectRatio)
+                        .onGloballyPositioned { coordinates ->
+                            val bounds = coordinates.boundsInWindow()
+                            val near = bounds.bottom >= -preloadDistancePx &&
+                                bounds.top <= screenHeightPx + preloadDistancePx
+                            if (near != nearViewport) nearViewport = near
+                        }
                         .clip(RoundedCornerShape(3.dp)),
                 ) {
-                    AsyncImage(
-                        model = File(Uri.parse(attachment.uri).path.orEmpty()),
-                        contentDescription = attachment.displayCaption(),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clickable {
-                                if (editable) onSelect(attachment) else onPreview(attachment)
+                    if (nearViewport) {
+                        AsyncImage(
+                            model = File(Uri.parse(attachment.uri).path.orEmpty()),
+                            contentDescription = attachment.displayCaption(),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable {
+                                    if (editable) onSelect(attachment) else onPreview(attachment)
+                                },
+                            contentScale = ContentScale.FillWidth,
+                            onSuccess = { state ->
+                                val size = state.painter.intrinsicSize
+                                if (
+                                    size.width.isFinite() &&
+                                    size.height.isFinite() &&
+                                    size.width > 0f &&
+                                    size.height > 0f
+                                ) {
+                                    imageAspectRatio = size.width / size.height
+                                }
                             },
-                        contentScale = ContentScale.FillWidth,
-                        onSuccess = { state ->
-                            val size = state.painter.intrinsicSize
-                            if (
-                                size.width.isFinite() &&
-                                size.height.isFinite() &&
-                                size.width > 0f &&
-                                size.height > 0f
-                            ) {
-                                imageAspectRatio = size.width / size.height
-                            }
-                        },
-                    )
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFFF2EEE7)),
+                        )
+                    }
                 }
                 if (attachment.caption.isNotBlank()) {
                     Text(

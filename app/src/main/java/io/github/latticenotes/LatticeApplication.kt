@@ -3,6 +3,9 @@ package io.github.latticenotes
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.memory.MemoryCache
 import io.github.latticenotes.data.AppDatabase
 import io.github.latticenotes.data.CredentialVault
 import io.github.latticenotes.data.NotesRepository
@@ -16,7 +19,7 @@ class AppContainer(application: Application) {
     val credentials = CredentialVault(application)
 }
 
-class LatticeApplication : Application() {
+class LatticeApplication : Application(), ImageLoaderFactory {
     lateinit var container: AppContainer
         private set
 
@@ -33,4 +36,12 @@ class LatticeApplication : Application() {
             ),
         )
     }
+
+    override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
+        .memoryCache {
+            MemoryCache.Builder(this)
+                .maxSizeBytes(48 * 1024 * 1024)
+                .build()
+        }
+        .build()
 }

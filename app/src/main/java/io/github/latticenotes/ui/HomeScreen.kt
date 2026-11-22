@@ -92,8 +92,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.latticenotes.R
 import io.github.latticenotes.data.FolderEntity
-import io.github.latticenotes.data.NoteEntity
 import io.github.latticenotes.data.NoteFormat
+import io.github.latticenotes.data.NoteListItem
 import io.github.latticenotes.data.NotesRepository
 import io.github.latticenotes.util.AttachmentReferences
 import io.github.latticenotes.util.formatListTimestamp
@@ -125,7 +125,7 @@ private val NoteListBorder = Color(0xFFE9E0D3)
 private val NoteListBarInk = Color(0xFFFFFCF7)
 
 private data class NoteRowUi(
-    val note: NoteEntity,
+    val note: NoteListItem,
     val displayTime: String,
     val hasImage: Boolean,
 )
@@ -143,7 +143,10 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val notes by repository.observeNotes().collectAsStateWithLifecycle(emptyList())
+    var query by remember { mutableStateOf("") }
+    val notes by remember(query) {
+        repository.observeNoteList(query)
+    }.collectAsStateWithLifecycle(emptyList())
     val folders by repository.observeFolders().collectAsStateWithLifecycle(emptyList())
     val filePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
@@ -157,15 +160,14 @@ fun HomeScreen(
     var view by remember { mutableStateOf(NoteView.ALL) }
     var selectedFolder by remember { mutableStateOf<FolderEntity?>(null) }
     var sort by remember { mutableStateOf(NoteSort.UPDATED) }
-    var query by remember { mutableStateOf("") }
     val searchFocus = remember { FocusRequester() }
     var categoryMenuOpen by remember { mutableStateOf(false) }
     var sortMenuOpen by remember { mutableStateOf(false) }
     var folderDialogOpen by remember { mutableStateOf(false) }
     var editFolder by remember { mutableStateOf<FolderEntity?>(null) }
-    var moveNote by remember { mutableStateOf<NoteEntity?>(null) }
-    var tagNote by remember { mutableStateOf<NoteEntity?>(null) }
-    var deleteNote by remember { mutableStateOf<NoteEntity?>(null) }
+    var moveNote by remember { mutableStateOf<NoteListItem?>(null) }
+    var tagNote by remember { mutableStateOf<NoteListItem?>(null) }
+    var deleteNote by remember { mutableStateOf<NoteListItem?>(null) }
 
     LaunchedEffect(initialSearch) {
         if (initialSearch) {
@@ -184,22 +186,17 @@ fun HomeScreen(
                     NoteView.FOLDER -> !note.trashed && note.folderId == selectedFolder?.id
                 }
             }
-            .filter { note ->
-                query.isBlank() ||
-                    note.title.contains(query, ignoreCase = true) ||
-                    note.body.contains(query, ignoreCase = true) ||
-                    note.tags.contains(query, ignoreCase = true)
-            }
+            .filter(NoteListItem::matchesQuery)
             .let { sequence ->
                 when (sort) {
                     NoteSort.UPDATED -> sequence.sortedWith(
-                        compareByDescending<NoteEntity> { it.pinned }.thenByDescending { it.updatedAt },
+                        compareByDescending<NoteListItem> { it.pinned }.thenByDescending { it.updatedAt },
                     )
                     NoteSort.CREATED -> sequence.sortedWith(
-                        compareByDescending<NoteEntity> { it.pinned }.thenByDescending { it.createdAt },
+                        compareByDescending<NoteListItem> { it.pinned }.thenByDescending { it.createdAt },
                     )
                     NoteSort.TITLE -> sequence.sortedWith(
-                        compareByDescending<NoteEntity> { it.pinned }
+                        compareByDescending<NoteListItem> { it.pinned }
                             .thenBy { it.title.lowercase().ifBlank { "untitled" } },
                     )
                 }
@@ -222,7 +219,7 @@ fun HomeScreen(
             NoteRowUi(
                 note = note,
                 displayTime = formatListTimestamp(note.updatedAt, now = now),
-                hasImage = note.body.contains("quyang-attachment://"),
+                hasImage = note.hasImage,
             )
         }
     }
@@ -468,17 +465,20 @@ fun HomeScreen(
                                     }
                                 },
                                 onShare = {
-                                    val text = note.title.ifBlank { "无标题" } +
-                                        "\n\n" + AttachmentReferences.plainText(note.body)
-                                    context.startActivity(
-                                        Intent.createChooser(
-                                            Intent(Intent.ACTION_SEND).apply {
-                                                type = "text/plain"
-                                                putExtra(Intent.EXTRA_TEXT, text)
-                                            },
-                                            "分享笔记",
-                                        ),
-                                    )
+                                    scope.launch {
+                                        val fullNote = repository.getNote(note.id) ?: return@launch
+                                        val text = fullNote.title.ifBlank { "无标题" } +
+                                            "\n\n" + AttachmentReferences.plainText(fullNote.body)
+                                        context.startActivity(
+                                            Intent.createChooser(
+                                                Intent(Intent.ACTION_SEND).apply {
+                                                    type = "text/plain"
+                                                    putExtra(Intent.EXTRA_TEXT, text)
+                                                },
+                                                "分享笔记",
+                                            ),
+                                        )
+                                    }
                                 },
                             )
                         }
@@ -638,23 +638,23 @@ fun TrashScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val notes by repository.observeNotes().collectAsStateWithLifecycle(emptyList())
-    var deleteNote by remember { mutableStateOf<NoteEntity?>(null) }
+    val notes by repository.observeNoteList().collectAsStateWithLifecycle(emptyList())
+    var deleteNote by remember { mutableStateOf<NoteListItem?>(null) }
     val rows = remember(notes) {
         val now = System.currentTimeMillis()
         notes.asSequence()
-            .filter(NoteEntity::trashed)
+            .filter(NoteListItem::trashed)
             .sortedByDescending { it.deletedAt ?: it.updatedAt }
             .map { note ->
                 NoteRowUi(
                     note = note,
                     displayTime = formatListTimestamp(note.updatedAt, now = now),
-                    hasImage = note.body.contains("quyang-attachment://"),
+                    hasImage = note.hasImage,
                 )
             }
             .toList()
     }
-    fun restore(note: NoteEntity) {
+    fun restore(note: NoteListItem) {
         scope.launch {
             repository.restore(note.id)
             Toast.makeText(context, "便签已恢复", Toast.LENGTH_SHORT).show()
@@ -950,7 +950,7 @@ private fun HomeSearchField(
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun NoteCard(
-    note: NoteEntity,
+    note: NoteListItem,
     displayTime: String,
     hasImage: Boolean,
     trashed: Boolean,
@@ -1329,7 +1329,7 @@ private fun RenameFolderDialog(
 
 @Composable
 private fun TagDialog(
-    note: NoteEntity,
+    note: NoteListItem,
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
 ) {

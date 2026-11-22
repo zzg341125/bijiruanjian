@@ -30,7 +30,8 @@ class NotesRepository(
     private val context: Context,
     private val dao: NotesDao,
 ) {
-    fun observeNotes(): Flow<List<NoteEntity>> = dao.observeNotes()
+    fun observeNoteList(query: String = ""): Flow<List<NoteListItem>> =
+        dao.observeNoteList(query.trim())
 
     fun observeNote(id: Long): Flow<NoteEntity?> = dao.observeNote(id)
 
@@ -160,7 +161,7 @@ class NotesRepository(
         dao.deleteFolder(id)
     }
 
-    suspend fun addAttachment(noteId: Long, source: Uri): AttachmentEntity? {
+    suspend fun addAttachment(noteId: Long, source: Uri): AttachmentEntity? = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
         val originalName = displayName(source, "attachment")
         val mime = FileImportModel.mimeTypeFor(originalName, resolver.getType(source))
@@ -178,7 +179,7 @@ class NotesRepository(
                 destination.outputStream().use { output -> input.copyTo(output) }
             } != null
         }.getOrDefault(false)
-        if (!copied) return null
+        if (!copied) return@withContext null
 
         val attachment = AttachmentEntity(
             noteId = noteId,
@@ -188,7 +189,7 @@ class NotesRepository(
         )
         val inserted = attachment.copy(id = dao.insertAttachment(attachment))
         writeMarkdownMirror(noteId)
-        return inserted
+        inserted
     }
 
     suspend fun removeAttachment(attachment: AttachmentEntity) {

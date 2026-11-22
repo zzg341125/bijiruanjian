@@ -31,6 +31,25 @@ data class NoteEntity(
     val syncAsBinary: Boolean = false,
 )
 
+data class NoteListItem(
+    val id: Long,
+    val title: String,
+    val format: String,
+    val folderId: Long?,
+    val tags: String,
+    val color: Long,
+    val pinned: Boolean,
+    val starred: Boolean,
+    val trashed: Boolean,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val deletedAt: Long?,
+    val reminderAt: Long?,
+    val syncAsBinary: Boolean,
+    val hasImage: Boolean,
+    val matchesQuery: Boolean,
+)
+
 @Entity(tableName = "folders")
 data class FolderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
