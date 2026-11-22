@@ -160,7 +160,7 @@ class NotesRepository(
         dao.deleteFolder(id)
     }
 
-    suspend fun addAttachment(noteId: Long, source: Uri): AttachmentEntity? {
+    suspend fun addAttachment(noteId: Long, source: Uri): AttachmentEntity? = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
         val originalName = displayName(source, "attachment")
         val mime = FileImportModel.mimeTypeFor(originalName, resolver.getType(source))
@@ -178,7 +178,11 @@ class NotesRepository(
                 destination.outputStream().use { output -> input.copyTo(output) }
             } != null
         }.getOrDefault(false)
-        if (!copied) return null
+        if (!copied) return@withContext null
+
+        if (mime?.startsWith("image/") == true) {
+            runCatching { ImageEditing.trimWhiteBorders(destination, mime, originalName) }
+        }
 
         val attachment = AttachmentEntity(
             noteId = noteId,
@@ -188,7 +192,7 @@ class NotesRepository(
         )
         val inserted = attachment.copy(id = dao.insertAttachment(attachment))
         writeMarkdownMirror(noteId)
-        return inserted
+        inserted
     }
 
     suspend fun removeAttachment(attachment: AttachmentEntity) {

@@ -14,4 +14,5 @@ internal object EditorTextMetrics {
     )
 
     fun lineHeightDp(fontScale: Float) = (lineHeight.value * fontScale).dp
+    fun cursorHeightDp(fontScale: Float) = (bodyFontSize.value * fontScale).dp
 }

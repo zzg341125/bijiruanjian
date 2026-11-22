@@ -89,6 +89,7 @@ fun SettingsScreen(
     settingsRepository: SettingsRepository,
     credentialVault: CredentialVault,
     settings: AppSettings,
+    onOpenTrash: () -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -256,6 +257,12 @@ fun SettingsScreen(
                         onSelect = {
                             scope.launch { settingsRepository.setDefaultFormat(it) }
                         },
+                    )
+                    SettingsRowDivider()
+                    SettingsActionRow(
+                        title = "回收站",
+                        subtitle = "恢复误删的便签，或彻底删除不再需要的便签",
+                        onClick = onOpenTrash,
                     )
                 }
             }

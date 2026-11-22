@@ -35,4 +35,11 @@ class EditorTextMetricsTest {
             EditorTextMetrics.lineHeightStyle.trim,
         )
     }
+
+    @Test
+    fun cursorUsesBodyTextHeightAtEveryFontScale() {
+        assertEquals(16f, EditorTextMetrics.cursorHeightDp(1f).value, 0.001f)
+        assertEquals(12.8f, EditorTextMetrics.cursorHeightDp(0.8f).value, 0.001f)
+        assertEquals(24f, EditorTextMetrics.cursorHeightDp(1.5f).value, 0.001f)
+    }
 }

@@ -1,13 +1,18 @@
 package io.github.latticenotes.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -17,7 +22,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
@@ -26,6 +33,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -46,6 +54,7 @@ fun InlineDocumentEditor(
     val density = LocalDensity.current
     val imeBottom = WindowInsets.ime.getBottom(density)
     var focused by remember { mutableStateOf(false) }
+    var cursorVisible by remember { mutableStateOf(true) }
     var latestLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
     val fieldValue = controller.textFieldValue
     LaunchedEffect(value) {
@@ -69,39 +78,87 @@ fun InlineDocumentEditor(
             ),
         )
     }
+    LaunchedEffect(focused, fieldValue.selection, fieldValue.text) {
+        cursorVisible = true
+        if (focused) {
+            while (true) {
+                delay(500)
+                cursorVisible = !cursorVisible
+            }
+        }
+    }
     controller.visualEditorColor = textColor
     SideEffect {
         controller.changeListener = currentOnValueChange
     }
-    BasicTextField(
-        value = fieldValue,
-        onValueChange = { next ->
-            controller.update(next)
-            currentOnValueChange(next.text)
-        },
-        modifier = modifier
-            .bringIntoViewRequester(bringIntoViewRequester)
-            .onFocusChanged {
-                focused = it.isFocused
-                if (it.isFocused) onFocused()
-            },
-        textStyle = TextStyle(
-            color = textColor,
-            fontSize = EditorTextMetrics.bodyFontSize,
-            lineHeight = EditorTextMetrics.lineHeight,
-            lineHeightStyle = EditorTextMetrics.lineHeightStyle,
+    CompositionLocalProvider(
+        LocalTextSelectionColors provides TextSelectionColors(
+            handleColor = Color.Transparent,
+            backgroundColor = textColor.copy(alpha = 0.3f),
         ),
-        cursorBrush = SolidColor(textColor),
-        interactionSource = interactionSource,
-        visualTransformation = controller.visualTransformation,
-        onTextLayout = { layout ->
-            latestLayout = layout
-            if (layout.lineCount > 0) {
-                currentOnLineHeightChanged(layout.getLineBottom(0) - layout.getLineTop(0))
-            }
-        },
-        maxLines = Int.MAX_VALUE,
-    )
+    ) {
+        BasicTextField(
+            value = fieldValue,
+            onValueChange = { next ->
+                controller.update(next)
+                currentOnValueChange(next.text)
+            },
+            modifier = modifier
+                .bringIntoViewRequester(bringIntoViewRequester)
+                .onFocusChanged {
+                    focused = it.isFocused
+                    if (it.isFocused) onFocused()
+                },
+            textStyle = TextStyle(
+                color = textColor,
+                fontSize = EditorTextMetrics.bodyFontSize,
+                lineHeight = EditorTextMetrics.lineHeight,
+                lineHeightStyle = EditorTextMetrics.lineHeightStyle,
+            ),
+            cursorBrush = SolidColor(Color.Transparent),
+            interactionSource = interactionSource,
+            visualTransformation = controller.visualTransformation,
+            onTextLayout = { layout ->
+                latestLayout = layout
+                if (layout.lineCount > 0) {
+                    currentOnLineHeightChanged(layout.getLineBottom(0) - layout.getLineTop(0))
+                }
+            },
+            decorationBox = { innerTextField ->
+                Box {
+                    innerTextField()
+                    val layout = latestLayout
+                    if (focused && cursorVisible && layout != null && fieldValue.selection.collapsed) {
+                        val transformed = controller.visualTransformation
+                            .filter(AnnotatedString(fieldValue.text))
+                        val cursorOffset = transformed.offsetMapping
+                            .originalToTransformed(
+                                fieldValue.selection.end.coerceIn(0, fieldValue.text.length),
+                            )
+                            .coerceIn(0, transformed.text.length)
+                        val line = layout.getLineForOffset(cursorOffset)
+                        val lineTop = layout.getLineTop(line)
+                        val lineBottom = layout.getLineBottom(line)
+                        val cursorHeight = with(density) {
+                            EditorTextMetrics.cursorHeightDp(fontScale).toPx()
+                        }
+                        Canvas(Modifier.matchParentSize()) {
+                            val x = layout.getCursorRect(cursorOffset).left
+                            val top = (lineTop + (lineBottom - lineTop - cursorHeight) / 2f)
+                                .coerceIn(lineTop, (lineBottom - cursorHeight).coerceAtLeast(lineTop))
+                            drawRoundRect(
+                                color = textColor,
+                                topLeft = androidx.compose.ui.geometry.Offset(x, top),
+                                size = Size(1.5.dp.toPx(), cursorHeight),
+                                cornerRadius = CornerRadius(0.75.dp.toPx()),
+                            )
+                        }
+                    }
+                }
+            },
+            maxLines = Int.MAX_VALUE,
+        )
+    }
 }
 
 enum class DocumentFormatAction {

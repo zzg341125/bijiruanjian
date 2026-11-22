@@ -2233,13 +2233,13 @@ private fun EmbeddedDocumentImage(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 2.dp, vertical = 10.dp),
+                .padding(vertical = 10.dp),
             shape = RoundedCornerShape(7.dp),
             color = Color(0xFFFFFEFB),
             shadowElevation = 4.dp,
         ) {
             Column(
-                modifier = Modifier.padding(5.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Box(
@@ -2257,7 +2257,7 @@ private fun EmbeddedDocumentImage(
                             .clickable {
                                 if (editable) onSelect(attachment) else onPreview(attachment)
                             },
-                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                        contentScale = ContentScale.Crop,
                     )
                 }
                 if (attachment.caption.isNotBlank()) {

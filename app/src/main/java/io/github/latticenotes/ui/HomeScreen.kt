@@ -32,6 +32,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
@@ -70,7 +71,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -563,7 +564,7 @@ fun HomeScreen(
     deleteNote?.let { note ->
         AlertDialog(
             onDismissRequest = { deleteNote = null },
-            title = { Text(if (note.trashed) "永久删除？" else "移到回收站？") },
+            title = { Text(if (note.trashed) "彻底删除？" else "移到回收站？") },
             text = {
                 Text(
                     if (note.trashed) {
@@ -585,7 +586,7 @@ fun HomeScreen(
                         }
                         deleteNote = null
                     },
-                ) { Text(if (note.trashed) "永久删除" else "移到回收站") }
+                ) { Text(if (note.trashed) "彻底删除" else "移到回收站") }
             },
             dismissButton = {
                 TextButton(onClick = { deleteNote = null }) { Text("取消") }
@@ -624,6 +625,147 @@ fun HomeScreen(
             },
             confirmButton = {
                 TextButton(onClick = { sortMenuOpen = false }) { Text("取消") }
+            },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TrashScreen(
+    repository: NotesRepository,
+    onBack: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val notes by repository.observeNotes().collectAsStateWithLifecycle(emptyList())
+    var deleteNote by remember { mutableStateOf<NoteEntity?>(null) }
+    val rows = remember(notes) {
+        val now = System.currentTimeMillis()
+        notes.asSequence()
+            .filter(NoteEntity::trashed)
+            .sortedByDescending { it.deletedAt ?: it.updatedAt }
+            .map { note ->
+                NoteRowUi(
+                    note = note,
+                    displayTime = formatListTimestamp(note.updatedAt, now = now),
+                    hasImage = note.body.contains("quyang-attachment://"),
+                )
+            }
+            .toList()
+    }
+    fun restore(note: NoteEntity) {
+        scope.launch {
+            repository.restore(note.id)
+            Toast.makeText(context, "便签已恢复", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = Color.Transparent,
+        topBar = {
+            Box(Modifier.fillMaxWidth()) {
+                Image(
+                    painter = painterResource(R.drawable.smartisan_title_bar),
+                    contentDescription = null,
+                    modifier = Modifier.matchParentSize(),
+                    contentScale = ContentScale.FillBounds,
+                )
+                CenterAlignedTopAppBar(
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.Outlined.ArrowBack,
+                                contentDescription = "返回",
+                                tint = NoteListBarInk,
+                                modifier = Modifier.size(27.dp),
+                            )
+                        }
+                    },
+                    title = {
+                        Text(
+                            text = "回收站",
+                            color = NoteListBarInk,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = NoteListBarInk,
+                        navigationIconContentColor = NoteListBarInk,
+                    ),
+                )
+            }
+        },
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+        ) {
+            if (rows.isEmpty()) {
+                EmptyNotes(isSearching = false, isTrash = true)
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        top = 10.dp,
+                        bottom = 24.dp,
+                    ),
+                ) {
+                    item(key = "trash-hint") {
+                        Text(
+                            text = "长按便签可选择恢复或彻底删除",
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                            color = NoteListTimeInk,
+                            fontSize = 12.sp,
+                        )
+                    }
+                    items(
+                        items = rows,
+                        key = { it.note.id },
+                        contentType = { "trash-note-card" },
+                    ) { row ->
+                        val note = row.note
+                        NoteCard(
+                            note = note,
+                            displayTime = row.displayTime,
+                            hasImage = row.hasImage,
+                            trashed = true,
+                            onClick = {},
+                            onTogglePin = {},
+                            onToggleStar = {},
+                            onDelete = { deleteNote = note },
+                            onRestore = { restore(note) },
+                            onFolder = {},
+                            onTags = {},
+                            onDuplicate = {},
+                            onShare = {},
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    deleteNote?.let { note ->
+        AlertDialog(
+            onDismissRequest = { deleteNote = null },
+            title = { Text("彻底删除？") },
+            text = { Text("此操作会永久删除便签及其附件，无法撤销。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch { repository.permanentlyDelete(note.id) }
+                        deleteNote = null
+                    },
+                ) { Text("彻底删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteNote = null }) { Text("取消") }
             },
         )
     }
@@ -826,39 +968,43 @@ private fun NoteCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 78.dp),
+            .height(78.dp),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(78.dp)
                 .padding(horizontal = 12.dp)
-                .heightIn(min = 78.dp)
-                .drawBehind {
+                .drawWithCache {
                     val radius = 10.dp.toPx()
                     val corner = CornerRadius(radius, radius)
                     val dividerX = 38.dp.toPx()
-                    drawRoundRect(color = NoteListCard, cornerRadius = corner)
-                    drawRoundRect(
-                        color = NoteListCardMargin,
-                        size = Size(dividerX, size.height),
-                        cornerRadius = corner,
-                    )
-                    drawRect(
-                        color = NoteListCardMargin,
-                        topLeft = Offset(radius, 0f),
-                        size = Size((dividerX - radius).coerceAtLeast(0f), size.height),
-                    )
-                    drawLine(
-                        color = NoteListDivider,
-                        start = Offset(dividerX, 0f),
-                        end = Offset(dividerX, size.height),
-                        strokeWidth = 1.dp.toPx(),
-                    )
-                    drawRoundRect(
-                        color = NoteListBorder,
-                        cornerRadius = corner,
-                        style = Stroke(width = 0.7.dp.toPx()),
-                    )
+                    val dividerWidth = 1.dp.toPx()
+                    val borderWidth = 0.7.dp.toPx()
+                    onDrawBehind {
+                        drawRoundRect(color = NoteListCard, cornerRadius = corner)
+                        drawRoundRect(
+                            color = NoteListCardMargin,
+                            size = Size(dividerX, size.height),
+                            cornerRadius = corner,
+                        )
+                        drawRect(
+                            color = NoteListCardMargin,
+                            topLeft = Offset(radius, 0f),
+                            size = Size((dividerX - radius).coerceAtLeast(0f), size.height),
+                        )
+                        drawLine(
+                            color = NoteListDivider,
+                            start = Offset(dividerX, 0f),
+                            end = Offset(dividerX, size.height),
+                            strokeWidth = dividerWidth,
+                        )
+                        drawRoundRect(
+                            color = NoteListBorder,
+                            cornerRadius = corner,
+                            style = Stroke(width = borderWidth),
+                        )
+                    }
                 }
                 .combinedClickable(
                     onClick = onClick,
@@ -876,40 +1022,42 @@ private fun NoteCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Image(
-                    painter = painterResource(
-                        if (note.pinned) {
-                            R.drawable.smartisan_pin_checked
-                        } else {
-                            R.drawable.smartisan_pin_normal
-                        },
-                    ),
-                    contentDescription = if (note.pinned) "取消置顶" else "置顶",
+            if (!trashed) {
+                Row(
                     modifier = Modifier
-                        .size(width = 32.dp, height = 38.5.dp)
-                        .clickable(onClick = onTogglePin),
-                    contentScale = ContentScale.Fit,
-                )
-                Image(
-                    painter = painterResource(
-                        if (note.starred) {
-                            R.drawable.smartisan_star_checked
-                        } else {
-                            R.drawable.smartisan_star_normal
-                        },
-                    ),
-                    contentDescription = if (note.starred) "取消加星" else "加星",
-                    modifier = Modifier
-                        .size(width = 32.dp, height = 38.5.dp)
-                        .clickable(onClick = onToggleStar),
-                    contentScale = ContentScale.Fit,
-                )
+                        .align(Alignment.TopEnd)
+                        .padding(end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Image(
+                        painter = painterResource(
+                            if (note.pinned) {
+                                R.drawable.smartisan_pin_checked
+                            } else {
+                                R.drawable.smartisan_pin_normal
+                            },
+                        ),
+                        contentDescription = if (note.pinned) "取消置顶" else "置顶",
+                        modifier = Modifier
+                            .size(width = 32.dp, height = 38.5.dp)
+                            .clickable(onClick = onTogglePin),
+                        contentScale = ContentScale.Fit,
+                    )
+                    Image(
+                        painter = painterResource(
+                            if (note.starred) {
+                                R.drawable.smartisan_star_checked
+                            } else {
+                                R.drawable.smartisan_star_normal
+                            },
+                        ),
+                        contentDescription = if (note.starred) "取消加星" else "加星",
+                        modifier = Modifier
+                            .size(width = 32.dp, height = 38.5.dp)
+                            .clickable(onClick = onToggleStar),
+                        contentScale = ContentScale.Fit,
+                    )
+                }
             }
             Text(
                 text = note.title.ifBlank { "无标题" },
@@ -962,7 +1110,7 @@ private fun NoteCard(
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("永久删除") },
+                        text = { Text("彻底删除") },
                         leadingIcon = { Icon(Icons.Outlined.Delete, null) },
                         onClick = {
                             menuOpen = false
@@ -1054,7 +1202,11 @@ private fun EmptyNotes(isSearching: Boolean, isTrash: Boolean) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = if (isSearching) "换个关键词试试" else "点击右上角新建笔记",
+                text = when {
+                    isSearching -> "换个关键词试试"
+                    isTrash -> "删除的便签会显示在这里"
+                    else -> "点击右上角新建笔记"
+                },
                 color = Color(0xFFC4B6A5),
                 fontSize = 13.sp,
             )

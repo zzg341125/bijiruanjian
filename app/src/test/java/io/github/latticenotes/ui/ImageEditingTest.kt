@@ -55,6 +55,29 @@ class ImageEditingTest {
     }
 
     @Test
+    fun whiteBordersAreTrimmedToTheContentBounds() {
+        val bounds = ImageEditing.whiteBorderCropBounds(10, 8) { x, y ->
+            x < 2 || x >= 8 || y < 1 || y >= 7
+        }
+
+        assertEquals(2, bounds?.left)
+        assertEquals(1, bounds?.top)
+        assertEquals(8, bounds?.right)
+        assertEquals(7, bounds?.bottom)
+    }
+
+    @Test
+    fun whiteBorderTrimSkipsImagesWithoutTrimmedEdges() {
+        assertNull(ImageEditing.whiteBorderCropBounds(10, 8) { _, _ -> false })
+        assertNull(ImageEditing.whiteBorderCropBounds(10, 8) { _, _ -> true })
+        assertNull(
+            ImageEditing.whiteBorderCropBounds(10, 8) { x, y ->
+                x != 5 || y != 4
+            },
+        )
+    }
+
+    @Test
     fun captionFallsBackToAttachmentName() {
         assertEquals("旅行", image(1, caption = "旅行").displayCaption())
         assertEquals("photo.jpg", image(1).displayCaption())

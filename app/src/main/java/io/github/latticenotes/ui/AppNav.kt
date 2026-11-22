@@ -141,6 +141,13 @@ fun AppNav(
                     settingsRepository = settingsRepository,
                     credentialVault = credentialVault,
                     settings = settings,
+                    onOpenTrash = { navController.navigate("trash") },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable("trash") {
+                TrashScreen(
+                    repository = repository,
                     onBack = { navController.popBackStack() },
                 )
             }
