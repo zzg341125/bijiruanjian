@@ -10,6 +10,14 @@ contextBridge.exposeInMainWorld("quyang", {
   testWebDav: (config) => ipcRenderer.invoke("webdav:test", config),
   syncWebDav: (config, notes) => ipcRenderer.invoke("webdav:sync", config, notes),
   downloadWebDav: (config) => ipcRenderer.invoke("webdav:download", config),
+  getAppVersion: () => ipcRenderer.invoke("updater:version"),
+  checkForUpdates: () => ipcRenderer.invoke("updater:check"),
+  installUpdate: () => ipcRenderer.invoke("updater:install"),
+  onUpdaterStatus: (callback) => {
+    const listener = (_event, status) => callback(status);
+    ipcRenderer.on("updater:status", listener);
+    return () => ipcRenderer.removeListener("updater:status", listener);
+  },
   onMenuAction: (callback) => {
     const listener = (_event, action) => callback(action);
     ipcRenderer.on("menu-action", listener);

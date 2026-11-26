@@ -457,11 +457,25 @@ internal class MarkdownVisualTransformation(
                 cursor += 2
                 changed = true
             } else {
-                val heading = HEADING.matchAt(source, cursor)
-                if (heading != null && heading.range.last < end) {
+                val headingStart = cursor
+                while (
+                    cursor < end &&
+                    cursor - headingStart < HEADING_MAX_DEPTH &&
+                    source[cursor] == '#'
+                ) {
+                    cursor++
+                }
+                val headingDepth = cursor - headingStart
+                if (
+                    headingDepth in 1..HEADING_MAX_DEPTH &&
+                    cursor < end &&
+                    source[cursor].isWhitespace()
+                ) {
+                    while (cursor < end && source[cursor].isWhitespace()) cursor++
                     analysis.heading = true
-                    cursor = heading.range.last + 1
                     changed = true
+                } else {
+                    cursor = headingStart
                 }
             }
         } while (changed)
@@ -487,7 +501,7 @@ internal class MarkdownVisualTransformation(
     )
 
     companion object {
-        private val HEADING = Regex("^#{1,6}\\s+")
+        private const val HEADING_MAX_DEPTH = 6
         private val colorOpen = Regex("<color:(#[0-9A-Fa-f]{6})>")
 
         private fun parseColor(hex: String): Color? =

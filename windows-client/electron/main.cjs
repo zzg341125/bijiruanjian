@@ -3,6 +3,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
+const updater = require("./updater.cjs");
 const webdav = require("./webdav.cjs");
 
 const APP_NAME = "曲阳便签";
@@ -33,7 +34,8 @@ async function loadData() {
         webDavUrl: "",
         webDavUsername: "",
         webDavPassword: "",
-        webDavAutoSync: false
+        webDavAutoSync: false,
+        autoUpdateEnabled: true
       }
     };
   }
@@ -192,6 +194,30 @@ ipcMain.handle("note:export-html", async (_event, payload) => {
 ipcMain.handle("webdav:test", (_event, config) => webdav.testConnection(config));
 ipcMain.handle("webdav:sync", (_event, config, notes) => webdav.syncNotes(config, notes));
 ipcMain.handle("webdav:download", (_event, config) => webdav.downloadNotes(config));
+
+ipcMain.handle("updater:version", () => app.getVersion());
+ipcMain.handle("updater:check", async () => {
+  try {
+    return await updater.checkForUpdates({
+      currentVersion: app.getVersion(),
+      updatesDir: path.join(app.getPath("temp"), "quyang-notes-updates"),
+      onStatus: (status) => mainWindow?.webContents.send("updater:status", status)
+    });
+  } catch (error) {
+    mainWindow?.webContents.send("updater:status", {
+      state: "error",
+      message: error.message
+    });
+    throw error;
+  }
+});
+
+ipcMain.handle("updater:install", () => updater.installUpdate({
+  updatesDir: path.join(app.getPath("temp"), "quyang-notes-updates"),
+  targetPath: process.env.PORTABLE_EXECUTABLE_FILE || app.getPath("exe"),
+  currentPid: process.pid,
+  onQuit: () => setTimeout(() => app.quit(), 300)
+}));
 
 app.whenReady().then(async () => {
   app.setName(APP_NAME);

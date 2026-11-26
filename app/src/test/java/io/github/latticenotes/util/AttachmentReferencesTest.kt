@@ -99,4 +99,20 @@ class AttachmentReferencesTest {
         assertTrue(edited.contains(reference))
         assertTrue(edited.endsWith("\n新结尾"))
     }
+
+    @Test
+    fun staleBlockBoundsDoNotBreakEditingAfterImageContentChanges() {
+        val reference = AttachmentReferences.imageMarkdown(1, "图片.png")
+        val body = "新开头\n$reference\n新结尾"
+
+        val edited = AttachmentReferences.replaceDocumentBlockText(
+            body = body,
+            blockKey = "text-after-1",
+            editedText = "更新后的结尾",
+        )
+
+        assertTrue(edited.startsWith("新开头\n"))
+        assertTrue(edited.contains(reference))
+        assertTrue(edited.endsWith("\n更新后的结尾"))
+    }
 }

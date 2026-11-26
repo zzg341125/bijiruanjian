@@ -182,6 +182,7 @@ class DocumentEditorController {
 
     private var cachedColor: Color? = null
     private var cachedTransformation: MarkdownVisualTransformation? = null
+    private var colorSelection: TextRange? = null
     internal var changeListener: ((String) -> Unit)? = null
     internal val visualTransformation: MarkdownVisualTransformation
         get() = cachedTransformation ?: MarkdownVisualTransformation(
@@ -211,6 +212,11 @@ class DocumentEditorController {
         )
     }
 
+    internal fun prepareColorSelection() {
+        colorSelection = textFieldValue.selection
+            .takeUnless { it.collapsed }
+    }
+
     fun apply(action: DocumentFormatAction): Boolean {
         val current = textFieldValue
         val updated = DocumentMarkupFormatter.apply(
@@ -230,12 +236,15 @@ class DocumentEditorController {
 
     fun applyColor(color: Color): Boolean {
         val current = textFieldValue
-        if (current.selection.collapsed) return false
+        val selection = current.selection
+            .takeUnless { it.collapsed }
+            ?: colorSelection
+            ?: return false
         val colorHex = "#%06X".format(color.toArgb() and 0xFFFFFF)
         val updated = DocumentMarkupFormatter.applyColor(
             text = current.text,
-            selectionStart = current.selection.start,
-            selectionEnd = current.selection.end,
+            selectionStart = selection.start,
+            selectionEnd = selection.end,
             colorHex = colorHex,
         )
         if (updated.text == current.text) return false
@@ -243,6 +252,7 @@ class DocumentEditorController {
             text = updated.text,
             selection = TextRange(updated.selectionStart, updated.selectionEnd),
         )
+        colorSelection = null
         changeListener?.invoke(updated.text)
         return true
     }

@@ -1,7 +1,9 @@
 package io.github.latticenotes.ui
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import org.junit.Assert.assertEquals
@@ -90,6 +92,27 @@ class EditorMarkupTest {
     }
 
     @Test
+    fun colorKeepsTheSelectionCapturedBeforeOpeningTheMenu() {
+        val controller = DocumentEditorController()
+        controller.update(
+            TextFieldValue(
+                text = "今天完成小组件",
+                selection = TextRange(2, 6),
+            ),
+        )
+        controller.prepareColorSelection()
+        controller.update(
+            TextFieldValue(
+                text = "今天完成小组件",
+                selection = TextRange(2),
+            ),
+        )
+
+        assertTrue(controller.applyColor(Color(0xFFC34C4C)))
+        assertEquals("今天<color:#C34C4C>完成小组</color>件", controller.textFieldValue.text)
+    }
+
+    @Test
     fun visualEditorHidesFormattingMarkupAndKeepsStyles() {
         val source =
             "# 标题\n<center>- [ ] 居中待办</center>\n**重点**正文"
@@ -127,6 +150,25 @@ class EditorMarkupTest {
         assertEquals(
             source.length,
             transformed.offsetMapping.transformedToOriginal(transformed.text.length),
+        )
+    }
+
+    @Test
+    fun visualEditorRendersHeadingOnANonFirstLine() {
+        val source = "第一段\n# 第二行标题\n正文"
+
+        val transformed = MarkdownVisualTransformation(
+            textColor = Color.Black,
+            accentColor = Color(0xFFC47B28),
+        ).filter(androidx.compose.ui.text.AnnotatedString(source))
+
+        assertEquals("第一段\n第二行标题\n正文", transformed.text.text)
+        assertTrue(
+            transformed.text.spanStyles.any {
+                it.item.fontSize == 24.sp &&
+                    it.start == "第一段\n".length &&
+                    it.end == "第一段\n第二行标题".length
+            },
         )
     }
 }

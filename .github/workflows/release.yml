@@ -80,6 +80,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test WebDAV and updater
+        run: npm test
+
       - name: Build Windows portable client
         run: npm run build:win
 

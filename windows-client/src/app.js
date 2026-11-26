@@ -23,6 +23,8 @@ const state = {
   savedEditorRange: null,
   toastTimer: null,
   webDavTimer: null,
+  updateStartupTimer: null,
+  updateTimer: null,
   syncing: false
 };
 
@@ -67,6 +69,11 @@ const elements = {
   webDavTestButton: document.querySelector("#webDavTestButton"),
   webDavSyncButton: document.querySelector("#webDavSyncButton"),
   webDavStatus: document.querySelector("#webDavStatus"),
+  autoUpdateEnabled: document.querySelector("#autoUpdateEnabled"),
+  updateCheckButton: document.querySelector("#updateCheckButton"),
+  updateInstallButton: document.querySelector("#updateInstallButton"),
+  updateStatus: document.querySelector("#updateStatus"),
+  appVersionLabel: document.querySelector("#appVersionLabel"),
   exportDataButton: document.querySelector("#exportDataButton"),
   importDataButton: document.querySelector("#importDataButton"),
   toast: document.querySelector("#toast")
@@ -855,6 +862,78 @@ function restartAutoSync() {
   }
 }
 
+function updateUpdaterStatus(status) {
+  elements.updateStatus.textContent = status.message || "更新状态未知";
+  const downloading = status.state === "downloading";
+  const downloaded = status.state === "downloaded";
+  elements.updateCheckButton.disabled = downloading || status.state === "installing";
+  elements.updateInstallButton.disabled = !downloaded;
+  elements.updateInstallButton.hidden = !downloaded && status.state !== "installing";
+  elements.updateCheckButton.textContent = downloading ? "下载中…" : "立即检查更新";
+  if (downloaded) {
+    elements.updateInstallButton.textContent = `重启并升级到 ${status.latestVersion}`;
+    showToast(`新版本 ${status.latestVersion} 已下载`);
+  }
+}
+
+async function checkForUpdates({ automatic = false, retried = false } = {}) {
+  if (elements.updateCheckButton.disabled) return null;
+  elements.updateCheckButton.disabled = true;
+  try {
+    const result = await window.quyang.checkForUpdates();
+    updateUpdaterStatus(result);
+    if (automatic && result.state === "downloaded") {
+      setTimeout(() => {
+        if (confirm(`曲阳便签 ${result.latestVersion} 已下载，是否立即重启升级？`)) {
+          installUpdate();
+        }
+      }, 600);
+    }
+    return result;
+  } catch (error) {
+    updateUpdaterStatus({ state: "error", message: `检查更新失败：${error.message}` });
+    if (automatic && !retried && state.data.settings.autoUpdateEnabled) {
+      state.updateStartupTimer = setTimeout(
+        () => checkForUpdates({ automatic: true, retried: true }),
+        15_000
+      );
+    }
+    return null;
+  } finally {
+    if (!elements.updateStatus.textContent.startsWith("正在下载")) {
+      elements.updateCheckButton.disabled = false;
+    }
+  }
+}
+
+async function installUpdate() {
+  try {
+    elements.updateInstallButton.disabled = true;
+    await flushSave();
+    await window.quyang.installUpdate();
+  } catch (error) {
+    elements.updateInstallButton.disabled = false;
+    updateUpdaterStatus({ state: "error", message: `升级失败：${error.message}` });
+  }
+}
+
+function restartUpdateChecks() {
+  clearTimeout(state.updateStartupTimer);
+  clearInterval(state.updateTimer);
+  state.updateStartupTimer = null;
+  state.updateTimer = null;
+  if (state.data.settings.autoUpdateEnabled) {
+    state.updateStartupTimer = setTimeout(
+      () => checkForUpdates({ automatic: true }),
+      2500
+    );
+    state.updateTimer = setInterval(
+      () => checkForUpdates({ automatic: false }),
+      6 * 60 * 60 * 1000
+    );
+  }
+}
+
 function setupColorMenu() {
   for (const [label, color] of COLORS) {
     const button = document.createElement("button");
@@ -1020,6 +1099,18 @@ function bindEvents() {
   });
 
   elements.webDavSyncButton.addEventListener("click", () => syncWebDav());
+  elements.autoUpdateEnabled.addEventListener("change", () => {
+    state.data.settings.autoUpdateEnabled = elements.autoUpdateEnabled.checked;
+    flushSave();
+    restartUpdateChecks();
+    if (!elements.autoUpdateEnabled.checked) {
+      updateUpdaterStatus({ state: "idle", message: "自动更新已关闭" });
+    }
+  });
+
+  elements.updateCheckButton.addEventListener("click", () => checkForUpdates());
+  elements.updateInstallButton.addEventListener("click", installUpdate);
+  window.quyang.onUpdaterStatus(updateUpdaterStatus);
 
   elements.exportDataButton.addEventListener("click", async () => {
     await flushSave();
@@ -1066,14 +1157,21 @@ async function initialize() {
     webDavUrl: "",
     webDavUsername: "",
     webDavPassword: "",
-    webDavAutoSync: false
+    webDavAutoSync: false,
+    autoUpdateEnabled: true
   };
   state.data.settings.webDavUrl ||= "";
   state.data.settings.webDavUsername ||= "";
   state.data.settings.webDavPassword ||= "";
   state.data.settings.webDavAutoSync = Boolean(state.data.settings.webDavAutoSync);
+  state.data.settings.autoUpdateEnabled = state.data.settings.autoUpdateEnabled !== false;
+  elements.autoUpdateEnabled.checked = state.data.settings.autoUpdateEnabled;
+  const appVersion = await window.quyang.getAppVersion();
+  elements.appVersionLabel.textContent = appVersion;
+  updateUpdaterStatus({ state: "idle", message: `当前版本 ${appVersion}` });
   applyTheme();
   restartAutoSync();
+  restartUpdateChecks();
   render();
 
   if (state.data.notes.length > 0) {

@@ -329,10 +329,10 @@ fun EditorScreen(
     fun replaceDocumentBlock(block: DocumentBodyBlock, editedText: String) {
         if (block.isImage || block.text == editedText) return
         setBodyWithHistory(
-            body.replaceRange(
-                block.start,
-                block.end,
-                block.replacementText(editedText),
+            AttachmentReferences.replaceDocumentBlockText(
+                body = body,
+                blockKey = block.key,
+                editedText = editedText,
             ),
         )
     }
@@ -911,6 +911,9 @@ fun EditorScreen(
                                 Toast.LENGTH_SHORT,
                             ).show()
                         }
+                    },
+                    onPrepareColor = {
+                        activeDocumentController()?.prepareColorSelection()
                     },
                 )
             }
@@ -1782,6 +1785,7 @@ private fun EditorFormatToolbar(
     modifier: Modifier = Modifier,
     onFormat: (DocumentFormatAction) -> Unit,
     onColor: (Color) -> Unit,
+    onPrepareColor: () -> Unit,
 ) {
     var colorMenuOpen by remember { mutableStateOf(false) }
     Surface(
@@ -1835,7 +1839,10 @@ private fun EditorFormatToolbar(
                 EditorTextFormatButton(
                     label = "颜色",
                     modifier = Modifier.fillMaxSize(),
-                    onClick = { colorMenuOpen = true },
+                    onClick = {
+                        onPrepareColor()
+                        colorMenuOpen = true
+                    },
                 )
                 DropdownMenu(
                     expanded = colorMenuOpen,

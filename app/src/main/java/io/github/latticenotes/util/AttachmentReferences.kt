@@ -72,6 +72,22 @@ object AttachmentReferences {
         return blocks
     }
 
+    fun replaceDocumentBlockText(
+        body: String,
+        blockKey: String,
+        editedText: String,
+    ): String {
+        val currentBlock = documentBlocks(body)
+            .firstOrNull { it.key == blockKey && !it.isImage }
+            ?: return body
+        if (currentBlock.text == editedText) return body
+        return body.replaceRange(
+            currentBlock.start,
+            currentBlock.end,
+            currentBlock.replacementText(editedText),
+        )
+    }
+
     fun referencedImageIds(body: String): Set<Long> =
         references(body)
             .map { it.attachmentId }

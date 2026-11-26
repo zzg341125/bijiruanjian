@@ -241,13 +241,26 @@
         </div>
       </section>
       <section>
+        <h3>软件更新</h3>
+        <label class="checkbox-row">
+          <input id="autoUpdateEnabled" type="checkbox" checked>
+          <span>启动时自动检查并下载新版本</span>
+        </label>
+        <p class="field-help">Windows 便携版会从 GitHub 官方发布页下载新版本，并在你确认后重启完成升级。</p>
+        <div class="webdav-actions">
+          <button id="updateCheckButton" class="secondary-button" type="button">立即检查更新</button>
+          <button id="updateInstallButton" class="secondary-button" type="button" disabled>重启并升级</button>
+        </div>
+        <div id="updateStatus" class="sync-status">正在读取版本…</div>
+      </section>
+      <section>
         <h3>数据</h3>
         <button id="exportDataButton" class="setting-action" type="button">导出全部便签数据</button>
         <button id="importDataButton" class="setting-action" type="button">导入曲阳便签数据</button>
       </section>
       <section class="about-section">
         <h3>关于</h3>
-        <p>曲阳便签 0.11.25 · 本地优先 · MIT License</p>
+        <p>曲阳便签 <span id="appVersionLabel">0.11.26</span> · 本地优先 · MIT License</p>
         <p>数据默认保存在当前 Windows 用户的应用数据目录。</p>
       </section>
     </form>
