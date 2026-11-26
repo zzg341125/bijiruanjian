@@ -1,0 +1,45 @@
+{
+  "name": "quyang-notes-windows",
+  "version": "0.11.24",
+  "description": "曲阳便签 Windows 客户端",
+  "main": "electron/main.cjs",
+  "author": "zzg341125",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win portable --x64"
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "io.github.latticenotes.windows",
+    "productName": "曲阳便签",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "artifactName": "QuyangNotes-Windows-${version}-portable.${ext}"
+    }
+  },
+  "allowScripts": {
+    "electron@35.7.5": true
+  }
+}

@@ -27,6 +27,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
@@ -93,7 +94,7 @@ fun InlineDocumentEditor(
     }
     CompositionLocalProvider(
         LocalTextSelectionColors provides TextSelectionColors(
-            handleColor = Color.Transparent,
+            handleColor = Color(0xFFC47B28),
             backgroundColor = textColor.copy(alpha = 0.3f),
         ),
     ) {
@@ -217,6 +218,25 @@ class DocumentEditorController {
             selectionStart = current.selection.start,
             selectionEnd = current.selection.end,
             action = action,
+        )
+        if (updated.text == current.text) return false
+        textFieldValue = TextFieldValue(
+            text = updated.text,
+            selection = TextRange(updated.selectionStart, updated.selectionEnd),
+        )
+        changeListener?.invoke(updated.text)
+        return true
+    }
+
+    fun applyColor(color: Color): Boolean {
+        val current = textFieldValue
+        if (current.selection.collapsed) return false
+        val colorHex = "#%06X".format(color.toArgb() and 0xFFFFFF)
+        val updated = DocumentMarkupFormatter.applyColor(
+            text = current.text,
+            selectionStart = current.selection.start,
+            selectionEnd = current.selection.end,
+            colorHex = colorHex,
         )
         if (updated.text == current.text) return false
         textFieldValue = TextFieldValue(

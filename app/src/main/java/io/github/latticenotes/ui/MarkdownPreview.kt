@@ -134,6 +134,8 @@ private fun inlineMarkdown(input: String): AnnotatedString = buildAnnotatedStrin
     val italic = Regex("(?<!\\*)\\*(?!\\*)(.+?)(?<!\\*)\\*(?!\\*)")
     val code = Regex("`([^`]+)`")
     val link = Regex("\\[([^]]+)]\\(([^)]+)\\)")
+    val color = Regex("<color:(#([0-9A-Fa-f]{6}))>(.*?)</color>")
+    val colorTag = Regex("<color:#[0-9A-Fa-f]{6}>|</color>")
     val markers = mutableListOf<Triple<Int, Int, SpanStyle>>()
 
     bold.findAll(input).forEach { match ->
@@ -156,20 +158,42 @@ private fun inlineMarkdown(input: String): AnnotatedString = buildAnnotatedStrin
             SpanStyle(color = Color(0xFF305C4A), textDecoration = TextDecoration.Underline),
         )
     }
+    color.findAll(input).forEach { match ->
+        val parsed = match.groupValues[2].toLongOrNull(16)?.let { Color(0xFF000000L or it) }
+        if (parsed != null) {
+            markers += Triple(
+                match.range.first,
+                match.range.last + 1,
+                SpanStyle(color = parsed),
+            )
+        }
+    }
 
     while (index < input.length) {
         val next = markers.filter { it.first >= index }.minByOrNull { it.first }
         if (next == null) {
-            append(input.substring(index).replace("**", "").replace("`", ""))
+            append(
+                input.substring(index)
+                    .replace("**", "")
+                    .replace("`", "")
+                    .replace(colorTag, ""),
+            )
             break
         }
         if (next.first > index) {
-            append(input.substring(index, next.first).replace("**", "").replace("`", ""))
+            append(
+                input.substring(index, next.first)
+                    .replace("**", "")
+                    .replace("`", "")
+                    .replace(colorTag, ""),
+            )
         }
         val rawEnd = minOf(next.second, input.length)
         var visible = input.substring(next.first, rawEnd)
             .replace("**", "")
             .replace("`", "")
+            .replace(color) { it.groupValues[3] }
+            .replace(colorTag, "")
         val linkMatch = Regex("\\[([^]]+)]\\(([^)]+)\\)").matchEntire(visible)
         if (linkMatch != null) {
             visible = linkMatch.groupValues[1]

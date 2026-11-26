@@ -3,6 +3,7 @@ package io.github.latticenotes.ui
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -64,6 +65,31 @@ class EditorMarkupTest {
     }
 
     @Test
+    fun selectedTextCanUseOneOfTheCustomColors() {
+        val result = DocumentMarkupFormatter.applyColor(
+            text = "今天完成小组件",
+            selectionStart = 2,
+            selectionEnd = 6,
+            colorHex = "#C34C4C",
+        )
+        val visible = MarkdownVisualTransformation(
+            textColor = Color.Black,
+            accentColor = Color(0xFFC47B28),
+        ).filter(androidx.compose.ui.text.AnnotatedString(result.text))
+
+        assertEquals(
+            "完成小组",
+            result.text.substring(result.selectionStart, result.selectionEnd),
+        )
+        assertFalse(visible.text.text.contains("<color:"))
+        assertTrue(
+            visible.text.spanStyles.any {
+                it.item.color == Color(0xFFC34C4C)
+            },
+        )
+    }
+
+    @Test
     fun visualEditorHidesFormattingMarkupAndKeepsStyles() {
         val source =
             "# 标题\n<center>- [ ] 居中待办</center>\n**重点**正文"
@@ -82,6 +108,11 @@ class EditorMarkupTest {
         assertTrue(
             transformed.text.spanStyles.any {
                 it.item.fontWeight == FontWeight.Bold
+            },
+        )
+        assertTrue(
+            transformed.text.spanStyles.any {
+                it.item.fontSize == 24.sp
             },
         )
         assertTrue(

@@ -96,6 +96,24 @@ app/build/outputs/apk/debug/app-debug.apk
 `https://dav.jianguoyun.com/dav/biji/`。此时应用会原样读取和写入 `biji` 目录，
 不会再额外创建子目录。
 
+## Windows 客户端
+
+`windows-client/` 是曲阳便签的 Windows 桌面版，包含便签列表、搜索、文件夹、
+回收站、信纸编辑、撤销/重做、7 色文字、图片插入、HTML/JSON 导入导出和设置。
+WebDAV 支持连接测试、手动同步及前台每 30 秒自动双向同步；地址、用户名和密码
+保存在本机设置中，密码按用户要求以明文保存。
+
+本地构建：
+
+```powershell
+cd windows-client
+npm install
+npm run build:win
+```
+
+GitHub Release 会同时提供 Android APK、Windows 便携版 EXE 和对应校验文件。
+详见 [Windows 客户端说明](windows-client/README.md)。
+
 ## 发布签名
 
 仓库不包含发布证书。请自行生成并安全保管 keystore，再通过 `KEYSTORE_FILE`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD` 环境变量配置签名。正式发布前还应执行：
@@ -111,8 +129,8 @@ app/build/outputs/apk/debug/app-debug.apk
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.11.23
-git push origin v0.11.23
+git tag v0.11.24
+git push origin v0.11.24
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。

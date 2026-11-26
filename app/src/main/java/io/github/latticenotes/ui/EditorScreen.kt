@@ -52,6 +52,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -177,6 +178,15 @@ private val EditorFormatBar = Color(0xFFFBF7ED)
 private val EditorFormatInk = Color(0xFF4D4A46)
 private val editorClockFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val editorDateFormatter = DateTimeFormatter.ofPattern("M月d日")
+private val editorTextColorChoices = listOf(
+    "墨黑" to Color(0xFF4D4A46),
+    "砖红" to Color(0xFFC34C4C),
+    "暖橙" to Color(0xFFC47B28),
+    "金色" to Color(0xFF9A7A20),
+    "松绿" to Color(0xFF3E7456),
+    "靛蓝" to Color(0xFF3F65A8),
+    "紫藤" to Color(0xFF7A5798),
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -889,6 +899,17 @@ fun EditorScreen(
                     onFormat = { action ->
                         if (activeDocumentController()?.apply(action) == true) {
                             format = NoteFormat.MARKDOWN
+                        }
+                    },
+                    onColor = { color ->
+                        if (activeDocumentController()?.applyColor(color) == true) {
+                            format = NoteFormat.MARKDOWN
+                        } else {
+                            Toast.makeText(
+                                context,
+                                "请先长按并选择要改色的文字",
+                                Toast.LENGTH_SHORT,
+                            ).show()
                         }
                     },
                 )
@@ -1760,7 +1781,9 @@ private fun EditorInfoBar(
 private fun EditorFormatToolbar(
     modifier: Modifier = Modifier,
     onFormat: (DocumentFormatAction) -> Unit,
+    onColor: (Color) -> Unit,
 ) {
+    var colorMenuOpen by remember { mutableStateOf(false) }
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = EditorFormatBar,
@@ -1803,11 +1826,45 @@ private fun EditorFormatToolbar(
                 onClick = { onFormat(DocumentFormatAction.QUOTE) },
             )
             EditorToolbarDivider()
-            EditorTextFormatButton(
-                label = "待办事项",
-                modifier = Modifier.weight(1.25f),
-                onClick = { onFormat(DocumentFormatAction.TODO) },
-            )
+            Box(
+                modifier = Modifier
+                    .weight(1.25f)
+                    .fillMaxHeight(),
+                contentAlignment = Alignment.Center,
+            ) {
+                EditorTextFormatButton(
+                    label = "颜色",
+                    modifier = Modifier.fillMaxSize(),
+                    onClick = { colorMenuOpen = true },
+                )
+                DropdownMenu(
+                    expanded = colorMenuOpen,
+                    onDismissRequest = { colorMenuOpen = false },
+                    containerColor = Color(0xFFFFFBF5),
+                ) {
+                    editorTextColorChoices.forEach { (label, color) ->
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .size(18.dp)
+                                            .background(color, CircleShape),
+                                    )
+                                    Text(label, color = EditorFormatInk)
+                                }
+                            },
+                            onClick = {
+                                colorMenuOpen = false
+                                onColor(color)
+                            },
+                        )
+                    }
+                }
+            }
         }
     }
 }

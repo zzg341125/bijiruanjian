@@ -40,7 +40,7 @@ object SingleFileExporter {
             var cursor = 0
             references.forEach { reference ->
                 if (reference.range.first > cursor) {
-                    append(escape(body.substring(cursor, reference.range.first)))
+                    append(renderFormattedText(body.substring(cursor, reference.range.first)))
                 }
                 attachmentsById[reference.attachmentId]?.let { attachment ->
                     append("\n")
@@ -49,7 +49,7 @@ object SingleFileExporter {
                 }
                 cursor = reference.range.last + 1
             }
-            if (cursor < body.length) append(escape(body.substring(cursor)))
+            if (cursor < body.length) append(renderFormattedText(body.substring(cursor)))
         }
         val embeddedIds = references.map { it.attachmentId }.toSet()
         val sections = attachments
@@ -108,4 +108,25 @@ object SingleFileExporter {
 
     private fun escapeAttribute(value: String): String =
         escape(value).replace("\"", "&quot;")
+
+    private fun renderFormattedText(value: String): String {
+        val output = StringBuilder()
+        var cursor = 0
+        COLOR_SPAN.findAll(value).forEach { match ->
+            output.append(escape(value.substring(cursor, match.range.first)))
+            output.append("<span style=\"color:")
+            output.append(match.groupValues[1])
+            output.append("\">")
+            output.append(escape(match.groupValues[2]))
+            output.append("</span>")
+            cursor = match.range.last + 1
+        }
+        output.append(escape(value.substring(cursor)))
+        return output.toString()
+    }
+
+    private val COLOR_SPAN = Regex(
+        "<color:(#[0-9A-Fa-f]{6})>(.*?)</color>",
+        RegexOption.DOT_MATCHES_ALL,
+    )
 }

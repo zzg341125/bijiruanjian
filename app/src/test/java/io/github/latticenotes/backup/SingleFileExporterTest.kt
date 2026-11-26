@@ -8,6 +8,18 @@ import org.junit.Test
 
 class SingleFileExporterTest {
     @Test
+    fun exportsCustomTextColorsAsHtmlWithoutLeakingMarkup() {
+        val html = SingleFileExporter.toHtml(
+            title = "彩色便签",
+            body = "今天<color:#C34C4C>完成小组</color>工作",
+            attachments = emptyList(),
+        )
+
+        assertTrue(html.contains("<span style=\"color:#C34C4C\">完成小组</span>"))
+        assertFalse(html.contains("&lt;color:"))
+    }
+
+    @Test
     fun embedsReferencedImageAtItsDocumentPosition() {
         val attachment = AttachmentEntity(
             id = 7,

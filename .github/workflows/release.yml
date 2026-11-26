@@ -60,3 +60,40 @@ jobs:
           files: |
             dist/QuyangNotes-${{ github.ref_name }}-release.apk
             dist/SHA256SUMS.txt
+
+  windows-client:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: windows-client
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: windows-client/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows portable client
+        run: npm run build:win
+
+      - name: Generate Windows checksum
+        shell: pwsh
+        run: |
+          $asset = Get-ChildItem "dist\QuyangNotes-Windows-*-portable.exe" | Select-Object -First 1
+          $hash = (Get-FileHash $asset.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($asset.Name)" | Set-Content "dist\SHA256SUMS-Windows.txt" -Encoding ascii
+
+      - name: Publish Windows client
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            windows-client/dist/QuyangNotes-Windows-*-portable.exe
+            windows-client/dist/SHA256SUMS-Windows.txt

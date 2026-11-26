@@ -5,6 +5,7 @@ import io.github.latticenotes.data.AttachmentEntity
 object AttachmentReferences {
     private const val URI_PREFIX = "quyang-attachment://"
     private val referencePattern = Regex("""!\[[^\]]*]\(quyang-attachment://(\d+)\)""")
+    private val colorTagPattern = Regex("""<color:#[0-9A-Fa-f]{6}>|</color>""")
     private val excessBlankLines = Regex("""\n{3,}""")
 
     fun imageMarkdown(attachmentId: Long, name: String): String {
@@ -88,6 +89,7 @@ object AttachmentReferences {
 
     fun plainText(body: String): String =
         body.replace(referencePattern, "")
+            .replace(colorTagPattern, "")
             .replace(excessBlankLines, "\n\n")
             .trim()
 

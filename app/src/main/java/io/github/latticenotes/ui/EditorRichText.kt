@@ -39,6 +39,27 @@ internal object DocumentMarkupFormatter {
         }
     }
 
+    fun applyColor(
+        text: String,
+        selectionStart: Int,
+        selectionEnd: Int,
+        colorHex: String,
+    ): FormattedDocument {
+        val start = selectionStart.coerceIn(0, text.length)
+        val end = selectionEnd.coerceIn(start, text.length)
+        if (start == end) return FormattedDocument(text, start, end)
+        val selected = text.substring(start, end)
+            .replace(Regex("<color:#[0-9A-Fa-f]{6}>|</color>"), "")
+        if (selected.isBlank()) return FormattedDocument(text, start, end)
+        val opening = "<color:${colorHex.uppercase()}>"
+        val replacement = "$opening$selected</color>"
+        return FormattedDocument(
+            text = text.replaceRange(start, end, replacement),
+            selectionStart = start + opening.length,
+            selectionEnd = start + opening.length + selected.length,
+        )
+    }
+
     private fun toggleLineFormat(
         text: String,
         start: Int,
@@ -231,6 +252,8 @@ internal class MarkdownVisualTransformation(
             for (position in start..output.length) mapVisual(position, original)
         }
 
+        var activeColor: Color? = null
+        var activeColorStart = 0
         var lineStart = 0
         while (lineStart <= source.length) {
             val newline = source.indexOf('\n', lineStart)
@@ -250,6 +273,32 @@ internal class MarkdownVisualTransformation(
             var boldStart: Int? = null
             while (cursor < lineEnd) {
                 when {
+                    source.startsWith("<color:", cursor, ignoreCase = true) -> {
+                        val colorTag = colorOpen.matchAt(source, cursor)
+                        if (colorTag != null && colorTag.range.last < lineEnd) {
+                            hide(cursor, colorTag.range.last)
+                            if (activeColor == null) {
+                                activeColor = parseColor(colorTag.groupValues[1])
+                                activeColorStart = output.length
+                            }
+                            cursor = colorTag.range.last + 1
+                        } else {
+                            appendOriginal(cursor)
+                            cursor++
+                        }
+                    }
+                    source.startsWith("</color>", cursor, ignoreCase = true) -> {
+                        hide(cursor, cursor + "</color>".length - 1)
+                        if (activeColor != null && activeColorStart < output.length) {
+                            spanStyles += AnnotatedString.Range(
+                                SpanStyle(color = activeColor!!),
+                                activeColorStart,
+                                output.length,
+                            )
+                        }
+                        activeColor = null
+                        cursor += "</color>".length
+                    }
                     source.startsWith("**", cursor) -> {
                         hide(cursor, cursor + 1)
                         if (boldStart == null) {
@@ -323,6 +372,14 @@ internal class MarkdownVisualTransformation(
             } else {
                 break
             }
+        }
+
+        if (activeColor != null && activeColorStart < output.length) {
+            spanStyles += AnnotatedString.Range(
+                SpanStyle(color = activeColor!!),
+                activeColorStart,
+                output.length,
+            )
         }
 
         originalToVisual[source.length] = output.length
@@ -431,5 +488,11 @@ internal class MarkdownVisualTransformation(
 
     companion object {
         private val HEADING = Regex("^#{1,6}\\s+")
+        private val colorOpen = Regex("<color:(#[0-9A-Fa-f]{6})>")
+
+        private fun parseColor(hex: String): Color? =
+            hex.removePrefix("#")
+                .toLongOrNull(16)
+                ?.let { Color(0xFF000000L or it) }
     }
 }

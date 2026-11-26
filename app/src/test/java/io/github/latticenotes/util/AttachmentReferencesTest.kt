@@ -6,6 +6,13 @@ import org.junit.Test
 
 class AttachmentReferencesTest {
     @Test
+    fun plainTextDropsCustomColorMarkup() {
+        val body = "今天<color:#C34C4C>完成小组</color>工作"
+
+        assertEquals("今天完成小组工作", AttachmentReferences.plainText(body))
+    }
+
+    @Test
     fun appendsAndReadsImageReference() {
         val reference = AttachmentReferences.imageMarkdown(42, "图片.png")
         val body = AttachmentReferences.appendToBody("正文", reference)
