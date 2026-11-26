@@ -6,6 +6,7 @@ const { spawn } = require("node:child_process");
 const { finished } = require("node:stream/promises");
 
 const RELEASE_API = "https://api.github.com/repos/zzg341125/bijiruanjian/releases/latest";
+const DOWNLOAD_TIMEOUT_MILLIS = 30 * 60 * 1000;
 let downloadedUpdate = null;
 
 function normalizeVersion(value) {
@@ -53,7 +54,7 @@ async function downloadFile(url, destination, onProgress) {
       Accept: "application/octet-stream",
       "User-Agent": "QuyangNotes-Windows-Updater"
     },
-    signal: AbortSignal.timeout(180_000),
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MILLIS),
     redirect: "follow"
   });
   if (!response.ok || !response.body) {
@@ -64,6 +65,7 @@ async function downloadFile(url, destination, onProgress) {
   const output = fs.createWriteStream(temporary);
   const reader = response.body.getReader();
   let downloaded = 0;
+  let lastReportedPercent = -1;
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -73,11 +75,11 @@ async function downloadFile(url, destination, onProgress) {
       if (!output.write(chunk)) {
         await new Promise((resolve) => output.once("drain", resolve));
       }
-      onProgress?.({
-        downloaded,
-        total,
-        percent: total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : 0
-      });
+      const percent = total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : 0;
+      if (percent !== lastReportedPercent) {
+        lastReportedPercent = percent;
+        onProgress?.({ downloaded, total, percent });
+      }
     }
     output.end();
     await finished(output);
