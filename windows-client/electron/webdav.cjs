@@ -1,4 +1,4 @@
-const USER_AGENT = "QuyangNotes-Windows/0.11.24";
+const USER_AGENT = "QuyangNotes-Windows/0.11.25";
 const SYNC_INTERVAL_MILLIS = 30_000;
 
 function authHeader(config) {
@@ -61,7 +61,8 @@ function escapeXml(value) {
 }
 
 function buildFrontmatter(note) {
-  const html = Buffer.from(note.bodyHtml || "", "utf8").toString("base64");
+  const markdown = note.bodyMarkdown || note.bodyText || "";
+  const encodedMarkdown = Buffer.from(markdown, "utf8").toString("base64");
   return [
     "---",
     `id: ${note.id}`,
@@ -72,12 +73,10 @@ function buildFrontmatter(note) {
     `pinned: ${Boolean(note.pinned)}`,
     `trashed: ${Boolean(note.trashed)}`,
     `folderId: ${note.folderId ? JSON.stringify(note.folderId) : "null"}`,
-    `bodyHtmlBase64: ${html}`,
+    `bodyMarkdownBase64: ${encodedMarkdown}`,
     "---",
     "",
-    `# ${String(note.title || "无标题").replaceAll("\n", " ")}`,
-    "",
-    note.bodyText || ""
+    markdown
   ].join("\n");
 }
 
@@ -101,12 +100,21 @@ function parseNoteFile(content, fallbackId) {
     }
   });
   try {
-    const html = Buffer.from(values.get("bodyHtmlBase64") || "", "base64").toString("utf8");
+    const bodyMarkdown = Buffer.from(values.get("bodyMarkdownBase64") || "", "base64").toString("utf8");
+    const legacyBodyHtml = values.get("bodyHtmlBase64")
+      ? Buffer.from(values.get("bodyHtmlBase64"), "base64").toString("utf8")
+      : "";
+    const plainBody = content.slice(match[0].length).trim();
     return {
       id: unquote(values.get("id") || JSON.stringify(fallbackId)),
       title: String(unquote(values.get("title") || "\"\"")),
-      bodyHtml: html,
-      bodyText: content.slice(match[0].length).replace(/^\s*#.*(?:\r?\n)+/, "").trim(),
+      bodyMarkdown: bodyMarkdown || plainBody.replace(/^#\s+.*(?:\r?\n)+/, "").trim(),
+      ...(legacyBodyHtml && !bodyMarkdown ? { bodyHtml: legacyBodyHtml } : {}),
+      bodyText: (bodyMarkdown || plainBody)
+        .replace(/!\[([^\]]*)]\([^)]+\)/g, "$1")
+        .replace(/<color:#[0-9A-Fa-f]{6}>|<\/color>/g, "")
+        .replace(/^[#>*\-\d.\s]+/gm, "")
+        .trim(),
       createdAt: Number(values.get("createdAt")) || Date.now(),
       updatedAt: Number(values.get("updatedAt")) || Date.now(),
       starred: values.get("starred") === "true",

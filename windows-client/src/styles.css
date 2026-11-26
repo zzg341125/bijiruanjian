@@ -755,6 +755,7 @@ svg {
   pointer-events: none;
 }
 
+.note-editor h1,
 .note-editor h2 {
   margin: 0;
   font-size: calc(25px * var(--editor-scale));

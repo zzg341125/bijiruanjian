@@ -93,6 +93,212 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function escapeMarkdown(value) {
+  return String(value ?? "").replace(/([\\`*_[\]()#])/g, "\\$1");
+}
+
+function safeImageUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return ["file:", "data:", "http:", "https:"].includes(parsed.protocol) ? parsed.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function cssColorToHex(value) {
+  const text = String(value || "").trim();
+  if (/^#[0-9A-Fa-f]{6}$/.test(text)) return text.toLowerCase();
+  const match = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(text);
+  if (!match) return "";
+  const hex = match.slice(1, 4)
+    .map((part) => Number(part).toString(16).padStart(2, "0"))
+    .join("");
+  return `#${hex}`;
+}
+
+function markdownToPlainText(markdown) {
+  return String(markdown || "")
+    .replace(/!\[([^\]]*)]\([^)]+\)/g, "$1")
+    .replace(/<color:#[0-9A-Fa-f]{6}>|<\/color>/g, "")
+    .replace(/<center>|<\/center>/g, "")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^>\s?/gm, "")
+    .replace(/^[-*]\s+/gm, "")
+    .replace(/^\d+\.\s+/gm, "")
+    .replace(/\*\*|__|`/g, "")
+    .replace(/\\([\\`*_[\]()#])/g, "$1")
+    .trim();
+}
+
+function inlineMarkdownToHtml(value) {
+  const colorTokens = [];
+  let source = String(value ?? "").replace(
+    /<color:(#[0-9A-Fa-f]{6})>(.*?)<\/color>/gs,
+    (_match, color, content) => {
+      const token = `\u0000COLOR${colorTokens.length}\u0000`;
+      colorTokens.push(`<span style="color:${color}">${inlineMarkdownToHtml(content)}</span>`);
+      return token;
+    }
+  );
+  source = escapeHtml(source)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, "<em>$1</em>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\[([^\]]+)]\(([^)]+)\)/g, (_match, label, href) => {
+      const safe = safeImageUrl(href);
+      return safe ? `<a href="${escapeHtml(safe)}">${label}</a>` : label;
+    });
+  colorTokens.forEach((html, index) => {
+    source = source.replace(`\u0000COLOR${index}\u0000`, html);
+  });
+  return source;
+}
+
+function markdownToHtml(markdown) {
+  const lines = String(markdown || "").replaceAll("\r\n", "\n").split("\n");
+  const output = [];
+  let listType = null;
+  const closeList = () => {
+    if (listType) {
+      output.push(`</${listType}>`);
+      listType = null;
+    }
+  };
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    const image = /^!\[([^\]]*)]\(([^)]+)\)\s*$/.exec(line);
+    if (image) {
+      closeList();
+      const src = safeImageUrl(image[2]);
+      if (src) {
+        output.push(
+          `<figure class="note-image" contenteditable="false"><img src="${escapeHtml(src)}" alt="${escapeHtml(image[1])}"><figcaption contenteditable="true">${escapeHtml(image[1] || "图片")}</figcaption></figure>`
+        );
+      }
+      continue;
+    }
+    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (heading) {
+      closeList();
+      const level = heading[1].length;
+      output.push(`<h${level}>${inlineMarkdownToHtml(heading[2])}</h${level}>`);
+      continue;
+    }
+    const unordered = /^[-*]\s+(.*)$/.exec(line);
+    if (unordered) {
+      if (listType !== "ul") {
+        closeList();
+        output.push("<ul>");
+        listType = "ul";
+      }
+      output.push(`<li>${inlineMarkdownToHtml(unordered[1])}</li>`);
+      continue;
+    }
+    const ordered = /^\d+\.\s+(.*)$/.exec(line);
+    if (ordered) {
+      if (listType !== "ol") {
+        closeList();
+        output.push("<ol>");
+        listType = "ol";
+      }
+      output.push(`<li>${inlineMarkdownToHtml(ordered[1])}</li>`);
+      continue;
+    }
+    const quote = /^>\s?(.*)$/.exec(line);
+    if (quote) {
+      closeList();
+      output.push(`<blockquote>${inlineMarkdownToHtml(quote[1])}</blockquote>`);
+      continue;
+    }
+    const centered = /^<center>(.*)<\/center>$/.exec(line.trim());
+    if (centered) {
+      closeList();
+      output.push(`<div style="text-align:center">${inlineMarkdownToHtml(centered[1])}</div>`);
+      continue;
+    }
+    if (!line.trim()) {
+      closeList();
+      output.push("<div><br></div>");
+      continue;
+    }
+    closeList();
+    output.push(`<div>${inlineMarkdownToHtml(line)}</div>`);
+  }
+  closeList();
+  return output.join("");
+}
+
+function inlineHtmlToMarkdown(node) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return escapeMarkdown(node.textContent || "");
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) return "";
+  const tag = node.tagName.toLowerCase();
+  const children = [...node.childNodes].map(inlineHtmlToMarkdown).join("");
+  if (tag === "br") return "\n";
+  if (tag === "strong" || tag === "b") return `**${children}**`;
+  if (tag === "em" || tag === "i") return `*${children}*`;
+  if (tag === "code") return `\`${children}\``;
+  if (tag === "a") {
+    const href = safeImageUrl(node.getAttribute("href") || "");
+    return href ? `[${children}](${href})` : children;
+  }
+  if (tag === "font") {
+    const color = node.getAttribute("color") || "";
+    return /^#[0-9A-Fa-f]{6}$/.test(color) ? `<color:${color}>${children}</color>` : children;
+  }
+  if (tag === "span") {
+    const color = cssColorToHex(node.style?.color);
+    return color ? `<color:${color}>${children}</color>` : children;
+  }
+  return children;
+}
+
+function blockHtmlToMarkdown(node) {
+  if (node.nodeType === Node.TEXT_NODE) return escapeMarkdown(node.textContent || "");
+  if (node.nodeType !== Node.ELEMENT_NODE) return "";
+  const tag = node.tagName.toLowerCase();
+  if (/^h[1-6]$/.test(tag)) {
+    return `${"#".repeat(Number(tag[1]))} ${[...node.childNodes].map(inlineHtmlToMarkdown).join("")}`;
+  }
+  if (tag === "figure") {
+    const image = node.querySelector("img");
+    if (!image) return "";
+    const src = safeImageUrl(image.getAttribute("src") || "");
+    if (!src) return "";
+    const caption = node.querySelector("figcaption")?.innerText?.trim() || image.getAttribute("alt") || "图片";
+    return `![${escapeMarkdown(caption)}](${src})`;
+  }
+  if (tag === "blockquote") {
+    return [...node.childNodes]
+      .map(inlineHtmlToMarkdown)
+      .join("")
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
+  }
+  if (tag === "ul" || tag === "ol") {
+    return [...node.children].map((item, index) => {
+      const prefix = tag === "ol" ? `${index + 1}. ` : "- ";
+      return prefix + [...item.childNodes].map(inlineHtmlToMarkdown).join("").trim();
+    }).join("\n");
+  }
+  const content = [...node.childNodes].map(inlineHtmlToMarkdown).join("").trim();
+  if (!content) return "";
+  if (node.style?.textAlign === "center") return `<center>${content}</center>`;
+  return content;
+}
+
+function htmlToMarkdown(html) {
+  const template = document.createElement("template");
+  template.innerHTML = html || "";
+  const blocks = [...template.content.childNodes]
+    .map((node) => blockHtmlToMarkdown(node))
+    .filter((value) => value !== "");
+  return blocks.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function sanitizeEditorHtml(html) {
   const template = document.createElement("template");
   template.innerHTML = html;
@@ -111,8 +317,16 @@ function sanitizeEditorHtml(html) {
   return template.innerHTML;
 }
 
-function plainEditorText() {
-  return elements.noteEditor.innerText.replace(/\u00a0/g, " ").trim();
+function normalizeNote(note) {
+  if (!note.bodyMarkdown) {
+    note.bodyMarkdown = note.bodyHtml
+      ? htmlToMarkdown(note.bodyHtml)
+      : (note.bodyText || "");
+  }
+  delete note.bodyHtml;
+  note.bodyText = markdownToPlainText(note.bodyMarkdown);
+  note.attachments = note.attachments || [];
+  return note;
 }
 
 function selectedNoteVisible() {
@@ -257,7 +471,7 @@ function renderNoteList() {
       <div class="note-flags">
         ${note.pinned ? icon("pin") : ""}
         ${note.starred ? icon("star") : ""}
-        ${/image|data:image|file:/i.test(note.bodyHtml) ? icon("image") : ""}
+        ${/!\[[^\]]*]\([^)]+\)/.test(note.bodyMarkdown) ? icon("image") : ""}
       </div>
     `;
     card.addEventListener("click", () => selectNote(note.id));
@@ -275,8 +489,9 @@ function renderEditor() {
   if (!note) return;
 
   if (elements.noteTitle.value !== note.title) elements.noteTitle.value = note.title;
-  if (!elements.noteEditor.contains(document.activeElement) && elements.noteEditor.innerHTML !== note.bodyHtml) {
-    elements.noteEditor.innerHTML = note.bodyHtml;
+  const renderedMarkdown = markdownToHtml(note.bodyMarkdown);
+  if (!elements.noteEditor.contains(document.activeElement) && elements.noteEditor.innerHTML !== renderedMarkdown) {
+    elements.noteEditor.innerHTML = renderedMarkdown;
   }
   elements.noteEditor.contentEditable = note.trashed ? "false" : "true";
   elements.noteTitle.disabled = note.trashed;
@@ -307,7 +522,7 @@ function createNote() {
   const note = {
     id: uid(),
     title: "",
-    bodyHtml: "",
+    bodyMarkdown: "",
     bodyText: "",
     tags: "",
     folderId: state.view === "folder" ? state.folderId : null,
@@ -335,8 +550,8 @@ function scheduleSave() {
   const note = currentNote();
   if (!note || note.trashed) return;
   note.title = elements.noteTitle.value;
-  note.bodyHtml = sanitizeEditorHtml(elements.noteEditor.innerHTML);
-  note.bodyText = plainEditorText();
+  note.bodyMarkdown = htmlToMarkdown(sanitizeEditorHtml(elements.noteEditor.innerHTML));
+  note.bodyText = markdownToPlainText(note.bodyMarkdown);
   note.updatedAt = now();
   markSaving();
   clearTimeout(state.saveTimer);
@@ -350,8 +565,8 @@ async function flushSave() {
   const note = currentNote();
   if (note && !note.trashed) {
     note.title = elements.noteTitle.value;
-    note.bodyHtml = sanitizeEditorHtml(elements.noteEditor.innerHTML);
-    note.bodyText = plainEditorText();
+    note.bodyMarkdown = htmlToMarkdown(sanitizeEditorHtml(elements.noteEditor.innerHTML));
+    note.bodyText = markdownToPlainText(note.bodyMarkdown);
   }
   clearTimeout(state.saveTimer);
   state.saveTimer = null;
@@ -403,7 +618,7 @@ function applyToolbarCommand(command) {
     return;
   }
   if (command === "heading" || command === "quote") {
-    const tag = command === "heading" ? "h2" : "blockquote";
+    const tag = command === "heading" ? "h1" : "blockquote";
     const current = document.queryCommandValue("formatBlock").toLowerCase();
     executeCommand("formatBlock", current === tag ? "<p>" : `<${tag}>`);
   }
@@ -534,7 +749,7 @@ figcaption{color:#806f5d;font-size:13px;padding-top:8px}
 blockquote{margin:0;padding-left:16px;border-left:3px solid #bf7729;color:#7a6958}
 </style>
 </head>
-<body><main><h1>${escapeHtml(note.title || "无标题")}</h1><article>${sanitizeEditorHtml(note.bodyHtml)}</article></main></body>
+<body><main><h1>${escapeHtml(note.title || "无标题")}</h1><article>${markdownToHtml(note.bodyMarkdown)}</article></main></body>
 </html>`;
 }
 
@@ -583,6 +798,7 @@ function updateWebDavStatus(message) {
 function mergeRemoteNotes(remoteNotes) {
   const byId = new Map(state.data.notes.map((note) => [String(note.id), note]));
   for (const remote of remoteNotes) {
+    normalizeNote(remote);
     const local = byId.get(String(remote.id));
     if (!local || remote.updatedAt >= local.updatedAt) {
       byId.set(String(remote.id), remote);
@@ -814,7 +1030,7 @@ function bindEvents() {
     const imported = await window.quyang.chooseImport();
     if (!imported || !Array.isArray(imported.notes)) return;
     const byId = new Map(state.data.notes.map((note) => [note.id, note]));
-    imported.notes.forEach((note) => byId.set(note.id, note));
+    imported.notes.forEach((note) => byId.set(note.id, normalizeNote(note)));
     state.data.notes = [...byId.values()];
     state.data.folders = Array.isArray(imported.folders)
       ? imported.folders
@@ -842,6 +1058,7 @@ async function initialize() {
   bindEvents();
   state.data = await window.quyang.loadData();
   state.data.notes = state.data.notes || [];
+  state.data.notes.forEach(normalizeNote);
   state.data.folders = state.data.folders || [];
   state.data.settings = state.data.settings || {
     theme: "system",
