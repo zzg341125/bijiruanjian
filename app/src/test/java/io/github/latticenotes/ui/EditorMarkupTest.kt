@@ -92,6 +92,19 @@ class EditorMarkupTest {
     }
 
     @Test
+    fun centerFormatsOnlyTheCurrentLineWhenSeveralLinesAreSelected() {
+        val source = "第一行\n第二行\n第三行"
+        val result = DocumentMarkupFormatter.apply(
+            text = source,
+            selectionStart = 0,
+            selectionEnd = source.length,
+            action = DocumentFormatAction.CENTER,
+        )
+
+        assertEquals("<center>第一行</center>\n第二行\n第三行", result.text)
+    }
+
+    @Test
     fun colorKeepsTheSelectionCapturedBeforeOpeningTheMenu() {
         val controller = DocumentEditorController()
         controller.update(
@@ -110,6 +123,39 @@ class EditorMarkupTest {
 
         assertTrue(controller.applyColor(Color(0xFFC34C4C)))
         assertEquals("今天<color:#C34C4C>完成小组</color>件", controller.textFieldValue.text)
+    }
+
+    @Test
+    fun selectedTextCanChangeThroughAllSevenColorsWithoutNesting() {
+        val controller = DocumentEditorController()
+        val colors = listOf(
+            Color(0xFF4D4A46),
+            Color(0xFFC34C4C),
+            Color(0xFFC47B28),
+            Color(0xFF9A7A20),
+            Color(0xFF3E7456),
+            Color(0xFF3F65A8),
+            Color(0xFF7A5798),
+        )
+        controller.update(
+            TextFieldValue(
+                text = "今天完成小组件",
+                selection = TextRange(2, 6),
+            ),
+        )
+        controller.prepareColorSelection()
+        colors.forEach { color ->
+            assertTrue(controller.applyColor(color))
+            controller.update(
+                TextFieldValue(
+                    text = controller.textFieldValue.text,
+                    selection = TextRange(controller.textFieldValue.text.length),
+                ),
+            )
+            controller.prepareColorSelection()
+        }
+
+        assertEquals("今天<color:#7A5798>完成小组</color>件", controller.textFieldValue.text)
     }
 
     @Test

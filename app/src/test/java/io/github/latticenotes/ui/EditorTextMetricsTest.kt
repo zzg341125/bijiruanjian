@@ -44,6 +44,18 @@ class EditorTextMetricsTest {
     }
 
     @Test
+    fun headingCursorUsesHeadingTextHeight() {
+        assertEquals(
+            24f,
+            EditorTextMetrics.cursorHeightDp(
+                fontScale = 1f,
+                fontSizeSp = 24f,
+            ).value,
+            0.001f,
+        )
+    }
+
+    @Test
     fun cursorOffsetStaysInsideTheLatestTextLayout() {
         assertEquals(1, EditorTextMetrics.clampCursorOffset(2, 1))
         assertEquals(0, EditorTextMetrics.clampCursorOffset(-1, 3))

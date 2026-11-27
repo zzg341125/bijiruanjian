@@ -14,7 +14,10 @@ internal object EditorTextMetrics {
     )
 
     fun lineHeightDp(fontScale: Float) = (lineHeight.value * fontScale).dp
-    fun cursorHeightDp(fontScale: Float) = (bodyFontSize.value * fontScale).dp
+    fun cursorHeightDp(
+        fontScale: Float,
+        fontSizeSp: Float = bodyFontSize.value,
+    ) = (fontSizeSp * fontScale).dp
     fun clampCursorOffset(offset: Int, layoutTextLength: Int): Int =
         offset.coerceIn(0, layoutTextLength.coerceAtLeast(0))
 }

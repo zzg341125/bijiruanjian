@@ -1,6 +1,6 @@
 const crypto = require("node:crypto");
 
-const USER_AGENT = "QuyangNotes-Windows/0.11.27";
+const USER_AGENT = "QuyangNotes-Windows/0.11.28";
 const SYNC_INTERVAL_MILLIS = 30_000;
 const MAX_REMOTE_DIRECTORIES = 100;
 const MAX_REMOTE_FILES = 5_000;

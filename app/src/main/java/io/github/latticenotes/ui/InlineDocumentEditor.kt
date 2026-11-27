@@ -145,8 +145,21 @@ fun InlineDocumentEditor(
                         val line = layout.getLineForOffset(cursorOffset)
                         val lineTop = layout.getLineTop(line)
                         val lineBottom = layout.getLineBottom(line)
+                        val cursorFontSize = transformed.text.spanStyles
+                            .firstOrNull {
+                                cursorOffset >= it.start &&
+                                    cursorOffset <= it.end &&
+                                    it.item.fontSize.value.isFinite()
+                            }
+                            ?.item
+                            ?.fontSize
+                            ?.value
+                            ?: EditorTextMetrics.bodyFontSize.value
                         val cursorHeight = with(density) {
-                            EditorTextMetrics.cursorHeightDp(fontScale).toPx()
+                            EditorTextMetrics.cursorHeightDp(
+                                fontScale = fontScale,
+                                fontSizeSp = cursorFontSize,
+                            ).toPx()
                         }
                         Canvas(Modifier.matchParentSize()) {
                             val x = layout.getCursorRect(cursorOffset).left
@@ -199,12 +212,18 @@ class DocumentEditorController {
         }
 
     internal fun update(value: TextFieldValue) {
+        if (value.text != textFieldValue.text) {
+            colorSelection = null
+        } else if (!value.selection.collapsed) {
+            colorSelection = value.selection
+        }
         textFieldValue = value
     }
 
     internal fun syncExternal(text: String) {
         val current = textFieldValue
         if (current.text == text) return
+        colorSelection = null
         val cursor = current.selection.end.coerceIn(0, text.length)
         textFieldValue = TextFieldValue(
             text = text,
@@ -213,8 +232,9 @@ class DocumentEditorController {
     }
 
     internal fun prepareColorSelection() {
-        colorSelection = textFieldValue.selection
-            .takeUnless { it.collapsed }
+        if (!textFieldValue.selection.collapsed) {
+            colorSelection = textFieldValue.selection
+        }
     }
 
     fun apply(action: DocumentFormatAction): Boolean {
@@ -226,6 +246,7 @@ class DocumentEditorController {
             action = action,
         )
         if (updated.text == current.text) return false
+        colorSelection = null
         textFieldValue = TextFieldValue(
             text = updated.text,
             selection = TextRange(updated.selectionStart, updated.selectionEnd),
@@ -252,7 +273,7 @@ class DocumentEditorController {
             text = updated.text,
             selection = TextRange(updated.selectionStart, updated.selectionEnd),
         )
-        colorSelection = null
+        colorSelection = TextRange(updated.selectionStart, updated.selectionEnd)
         changeListener?.invoke(updated.text)
         return true
     }

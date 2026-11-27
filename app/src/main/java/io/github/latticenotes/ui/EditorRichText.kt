@@ -23,6 +23,9 @@ internal object DocumentMarkupFormatter {
     private val bulletPrefix = Regex("^[-*]\\s+")
     private val todoPrefix = Regex("^-\\s+\\[[ xX]]\\s+")
     private val quotePrefix = Regex("^>\\s+")
+    private val colorOpen = Regex("<color:#[0-9A-Fa-f]{6}>")
+    private val colorClose = Regex("</color>")
+    private val colorTag = Regex("<color:#[0-9A-Fa-f]{6}>|</color>")
 
     fun apply(
         text: String,
@@ -48,16 +51,52 @@ internal object DocumentMarkupFormatter {
         val start = selectionStart.coerceIn(0, text.length)
         val end = selectionEnd.coerceIn(start, text.length)
         if (start == end) return FormattedDocument(text, start, end)
-        val selected = text.substring(start, end)
-            .replace(Regex("<color:#[0-9A-Fa-f]{6}>|</color>"), "")
+        val enclosingColor = enclosingColorSpan(text, start, end)
+        val replaceStart = enclosingColor?.first ?: start
+        val replaceEnd = (enclosingColor?.last ?: (end - 1)) + 1
+        val selected = text.substring(replaceStart, replaceEnd)
+            .replace(colorTag, "")
         if (selected.isBlank()) return FormattedDocument(text, start, end)
         val opening = "<color:${colorHex.uppercase()}>"
         val replacement = "$opening$selected</color>"
         return FormattedDocument(
-            text = text.replaceRange(start, end, replacement),
-            selectionStart = start + opening.length,
-            selectionEnd = start + opening.length + selected.length,
+            text = text.replaceRange(replaceStart, replaceEnd, replacement),
+            selectionStart = replaceStart + opening.length,
+            selectionEnd = replaceStart + opening.length + selected.length,
         )
+    }
+
+    private fun enclosingColorSpan(text: String, start: Int, end: Int): IntRange? {
+        colorOpen.findAll(text, 0)
+            .takeWhile { it.range.first < start }
+            .toList()
+            .asReversed()
+            .forEach { opening ->
+                val contentStart = opening.range.last + 1
+                if (start < contentStart) return@forEach
+                val closing = matchingColorClose(text, contentStart) ?: return@forEach
+                if (end <= closing.first) {
+                    return opening.range.first..closing.last
+                }
+            }
+        return null
+    }
+
+    private fun matchingColorClose(text: String, from: Int): IntRange? {
+        var depth = 1
+        val tags = sequence {
+            yieldAll(colorOpen.findAll(text, from))
+            yieldAll(colorClose.findAll(text, from))
+        }.sortedBy { it.range.first }
+        tags.forEach { tag ->
+            if (tag.value.startsWith("<color:")) {
+                depth++
+            } else {
+                depth--
+                if (depth == 0) return tag.range
+            }
+        }
+        return null
     }
 
     private fun toggleLineFormat(
@@ -66,7 +105,11 @@ internal object DocumentMarkupFormatter {
         end: Int,
         action: DocumentFormatAction,
     ): FormattedDocument {
-        val range = lineRange(text, start, end)
+        val range = if (action == DocumentFormatAction.CENTER) {
+            lineRange(text, start, start)
+        } else {
+            lineRange(text, start, end)
+        }
         val originalLines = text.substring(range.first, range.second).split('\n')
         val nonBlank = originalLines.filter { stripLineMarkup(it).isNotBlank() }
         if (nonBlank.isEmpty()) return FormattedDocument(text, start, end)
