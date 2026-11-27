@@ -48,6 +48,36 @@ class EditorMarkupTest {
     }
 
     @Test
+    fun lineToolbarButtonsToggleBackToTheOriginalText() {
+        val original = "第一行\n第二行"
+        val lineStart = "第一行\n".length
+        val expectations = mapOf(
+            DocumentFormatAction.HEADING to "第一行\n# 第二行",
+            DocumentFormatAction.CENTER to "第一行\n<center>第二行</center>",
+            DocumentFormatAction.BULLET to "第一行\n- 第二行",
+            DocumentFormatAction.QUOTE to "第一行\n> 第二行",
+        )
+
+        expectations.forEach { (action, formatted) ->
+            val enabled = DocumentMarkupFormatter.apply(
+                text = original,
+                selectionStart = lineStart,
+                selectionEnd = lineStart,
+                action = action,
+            )
+            val disabled = DocumentMarkupFormatter.apply(
+                text = enabled.text,
+                selectionStart = enabled.selectionStart,
+                selectionEnd = enabled.selectionEnd,
+                action = action,
+            )
+
+            assertEquals(action.name, formatted, enabled.text)
+            assertEquals(action.name, original, disabled.text)
+        }
+    }
+
+    @Test
     fun boldSelectionCanBeAppliedAndToggledOff() {
         val bold = DocumentMarkupFormatter.apply(
             text = "今天完成小组件",
@@ -180,6 +210,26 @@ class EditorMarkupTest {
     }
 
     @Test
+    fun applyingTheSameColorAgainRestoresDefaultTextColor() {
+        val source = "今天完成小组件"
+        val enabled = DocumentMarkupFormatter.applyColor(
+            text = source,
+            selectionStart = 2,
+            selectionEnd = 6,
+            colorHex = "#3F65A8",
+        )
+        val disabled = DocumentMarkupFormatter.applyColor(
+            text = enabled.text,
+            selectionStart = enabled.selectionStart,
+            selectionEnd = enabled.selectionEnd,
+            colorHex = "#3F65A8",
+        )
+
+        assertEquals("今天<color:#3F65A8>完成小组</color>件", enabled.text)
+        assertEquals(source, disabled.text)
+    }
+
+    @Test
     fun coloringCenteredTextKeepsCenterMarkupAroundTheColorSpan() {
         val source = "<center>居中文字</center>"
 
@@ -194,6 +244,30 @@ class EditorMarkupTest {
             "<center><color:#C47B28>居中文字</color></center>",
             result.text,
         )
+    }
+
+    @Test
+    fun legacyNestedColorMarkupIsFlattenedAndHidden() {
+        val source =
+            "<color:#3E7456><color:#7A5798><color:#4D4A46><color:#4D4A46>" +
+                "<color:#9A7A20><color:#4D4A46><color:#3F65A8>**未上报**\n" +
+                "<color:#3F65A8>1、2026</color>"
+
+        val normalized = DocumentMarkupFormatter.normalizeColors(source)
+        val visible = MarkdownVisualTransformation(
+            textColor = Color.Black,
+            accentColor = Color(0xFFC47B28),
+        ).filter(androidx.compose.ui.text.AnnotatedString(normalized)).text.text
+
+        assertEquals(
+            "**<color:#3F65A8>未上报</color>**\n<color:#3F65A8>1、2026</color>",
+            normalized,
+        )
+        assertFalse(visible.contains("<color:"))
+        assertFalse(visible.contains("</color>"))
+        assertFalse(visible.contains("**"))
+        assertTrue(visible.contains("未上报"))
+        assertTrue(visible.contains("1、2026"))
     }
 
     @Test

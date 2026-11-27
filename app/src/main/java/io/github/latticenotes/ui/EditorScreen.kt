@@ -267,7 +267,7 @@ fun EditorScreen(
         val value = note ?: return@LaunchedEffect
         if (!loaded) {
             title = value.title
-            body = value.body
+            body = DocumentMarkupFormatter.normalizeColors(value.body)
             format = runCatching { NoteFormat.valueOf(value.format) }.getOrDefault(NoteFormat.TEXT)
             loaded = true
         }

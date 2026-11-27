@@ -56,6 +56,62 @@ internal object DocumentMarkupFormatter {
         return recolorVisibleRange(text, start, end, colorHex)
     }
 
+    fun normalizeColors(text: String): String {
+        if (!text.contains("<color:", ignoreCase = true) &&
+            !text.contains("</color>", ignoreCase = true)
+        ) {
+            return text
+        }
+        val plain = StringBuilder()
+        val styles = mutableListOf<String?>()
+        val colorStack = mutableListOf<String>()
+        var cursor = 0
+        while (cursor < text.length) {
+            val opening = if (text.startsWith("<color:", cursor, ignoreCase = true)) {
+                colorOpen.matchAt(text, cursor)
+            } else {
+                null
+            }
+            if (opening != null) {
+                colorStack += "#" + opening.value
+                    .substringAfter("<color:#")
+                    .substringBefore(">")
+                    .uppercase()
+                cursor = opening.range.last + 1
+                continue
+            }
+            if (text.startsWith("</color>", cursor, ignoreCase = true)) {
+                if (colorStack.isNotEmpty()) colorStack.removeAt(colorStack.lastIndex)
+                cursor += "</color>".length
+                continue
+            }
+            plain.append(text[cursor])
+            styles += if (text[cursor] == '\n') null else colorStack.lastOrNull()
+            cursor++
+        }
+
+        val protected = BooleanArray(plain.length)
+        protectedSyntax.findAll(plain).forEach { match ->
+            for (index in match.range) protected[index] = true
+        }
+        protected.indices.forEach { index ->
+            if (protected[index]) styles[index] = null
+        }
+
+        val output = StringBuilder()
+        var index = 0
+        while (index < plain.length) {
+            val style = styles[index]
+            if (style != null) output.append("<color:$style>")
+            while (index < plain.length && styles[index] == style) {
+                output.append(plain[index])
+                index++
+            }
+            if (style != null) output.append("</color>")
+        }
+        return output.toString()
+    }
+
     private fun recolorVisibleRange(
         text: String,
         selectionStart: Int,
@@ -95,7 +151,7 @@ internal object DocumentMarkupFormatter {
                 continue
             }
             plain.append(text[original])
-            styles += colorStack.lastOrNull()
+            styles += if (text[original] == '\n') null else colorStack.lastOrNull()
             original++
             originalToPlain[original] = plain.length
         }
@@ -109,8 +165,13 @@ internal object DocumentMarkupFormatter {
         protected.indices.forEach { index ->
             if (protected[index]) styles[index] = null
         }
-        for (index in plainStart until plainEnd) {
-            if (!protected[index]) styles[index] = normalizedColor
+        val selectedIndices = (plainStart until plainEnd).filterNot { protected[it] }
+        if (selectedIndices.isEmpty()) {
+            return FormattedDocument(text, selectionStart, selectionEnd)
+        }
+        val removeColor = selectedIndices.all { styles[it] == normalizedColor }
+        selectedIndices.forEach { index ->
+            styles[index] = if (removeColor) null else normalizedColor
         }
 
         val output = StringBuilder()
@@ -332,8 +393,7 @@ internal class MarkdownVisualTransformation(
             for (position in start..output.length) mapVisual(position, original)
         }
 
-        var activeColor: Color? = null
-        var activeColorStart = 0
+        val activeColors = mutableListOf<Pair<Color, Int>>()
         var lineStart = 0
         while (lineStart <= source.length) {
             val newline = source.indexOf('\n', lineStart)
@@ -357,9 +417,9 @@ internal class MarkdownVisualTransformation(
                         val colorTag = colorOpen.matchAt(source, cursor)
                         if (colorTag != null && colorTag.range.last < lineEnd) {
                             hide(cursor, colorTag.range.last)
-                            if (activeColor == null) {
-                                activeColor = parseColor(colorTag.groupValues[1])
-                                activeColorStart = output.length
+                            val color = parseColor(colorTag.groupValues[1])
+                            if (color != null) {
+                                activeColors += color to output.length
                             }
                             cursor = colorTag.range.last + 1
                         } else {
@@ -369,14 +429,16 @@ internal class MarkdownVisualTransformation(
                     }
                     source.startsWith("</color>", cursor, ignoreCase = true) -> {
                         hide(cursor, cursor + "</color>".length - 1)
-                        if (activeColor != null && activeColorStart < output.length) {
+                        if (activeColors.isNotEmpty()) {
+                            val (color, start) = activeColors.removeAt(activeColors.lastIndex)
+                            if (start < output.length) {
                             spanStyles += AnnotatedString.Range(
-                                SpanStyle(color = activeColor!!),
-                                activeColorStart,
+                                    SpanStyle(color = color),
+                                    start,
                                 output.length,
                             )
                         }
-                        activeColor = null
+                        }
                         cursor += "</color>".length
                     }
                     source.startsWith("**", cursor) -> {
@@ -457,12 +519,14 @@ internal class MarkdownVisualTransformation(
             }
         }
 
-        if (activeColor != null && activeColorStart < output.length) {
+        activeColors.forEach { (color, start) ->
+            if (start < output.length) {
             spanStyles += AnnotatedString.Range(
-                SpanStyle(color = activeColor!!),
-                activeColorStart,
+                    SpanStyle(color = color),
+                    start,
                 output.length,
             )
+        }
         }
 
         originalToVisual[source.length] = output.length
