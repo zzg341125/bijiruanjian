@@ -129,8 +129,8 @@ GitHub Release 会同时提供 Android APK、Windows 便携版 EXE 和对应校�
 推送版本标签会触发 `.github/workflows/release.yml`：
 
 ```bash
-git tag v0.11.28
-git push origin v0.11.28
+git tag v0.11.29
+git push origin v0.11.29
 ```
 
 Action 会自动测试、执行 Lint、构建并签名 Release APK、验签、生成 SHA-256，然后创建带 APK 的 GitHub Release。

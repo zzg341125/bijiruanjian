@@ -159,6 +159,44 @@ class EditorMarkupTest {
     }
 
     @Test
+    fun colorCanChangeInsideAnExistingColoredSpan() {
+        val opening = "<color:#C34C4C>"
+        val closing = "</color>"
+        val source = "今天${opening}完成小组${closing}件"
+        val selectedStart = "今天".length + opening.length + "完成".length
+        val selectedEnd = selectedStart + "小组".length
+
+        val result = DocumentMarkupFormatter.applyColor(
+            text = source,
+            selectionStart = selectedStart,
+            selectionEnd = selectedEnd,
+            colorHex = "#C47B28",
+        )
+
+        assertEquals(
+            "今天<color:#C34C4C>完成</color><color:#C47B28>小组</color>件",
+            result.text,
+        )
+    }
+
+    @Test
+    fun coloringCenteredTextKeepsCenterMarkupAroundTheColorSpan() {
+        val source = "<center>居中文字</center>"
+
+        val result = DocumentMarkupFormatter.applyColor(
+            text = source,
+            selectionStart = 0,
+            selectionEnd = source.length,
+            colorHex = "#C47B28",
+        )
+
+        assertEquals(
+            "<center><color:#C47B28>居中文字</color></center>",
+            result.text,
+        )
+    }
+
+    @Test
     fun visualEditorHidesFormattingMarkupAndKeepsStyles() {
         val source =
             "# 标题\n<center>- [ ] 居中待办</center>\n**重点**正文"

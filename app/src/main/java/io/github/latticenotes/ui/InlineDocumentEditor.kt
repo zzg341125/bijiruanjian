@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -45,6 +47,7 @@ fun InlineDocumentEditor(
     controller: DocumentEditorController,
     textColor: Color,
     modifier: Modifier = Modifier,
+    textAlign: TextAlign = TextAlign.Start,
     onFocused: () -> Unit = {},
     onLineHeightChanged: (Float) -> Unit = {},
 ) {
@@ -115,6 +118,7 @@ fun InlineDocumentEditor(
                 fontSize = EditorTextMetrics.bodyFontSize,
                 lineHeight = EditorTextMetrics.lineHeight,
                 lineHeightStyle = EditorTextMetrics.lineHeightStyle,
+                textAlign = textAlign,
             ),
             cursorBrush = SolidColor(Color.Transparent),
             interactionSource = interactionSource,
@@ -126,7 +130,10 @@ fun InlineDocumentEditor(
                 }
             },
             decorationBox = { innerTextField ->
-                Box {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    propagateMinConstraints = true,
+                ) {
                     innerTextField()
                     val layout = latestLayout
                     if (focused && cursorVisible && layout != null && fieldValue.selection.collapsed) {
@@ -145,16 +152,12 @@ fun InlineDocumentEditor(
                         val line = layout.getLineForOffset(cursorOffset)
                         val lineTop = layout.getLineTop(line)
                         val lineBottom = layout.getLineBottom(line)
-                        val cursorFontSize = transformed.text.spanStyles
-                            .firstOrNull {
-                                cursorOffset >= it.start &&
-                                    cursorOffset <= it.end &&
-                                    it.item.fontSize.value.isFinite()
-                            }
-                            ?.item
-                            ?.fontSize
-                            ?.value
-                            ?: EditorTextMetrics.bodyFontSize.value
+                        val cursorFontSize = EditorTextMetrics.cursorFontSizeSp(
+                            visibleText = transformed.text,
+                            originalText = fieldValue.text,
+                            visibleOffset = cursorOffset,
+                            originalOffset = fieldValue.selection.end,
+                        )
                         val cursorHeight = with(density) {
                             EditorTextMetrics.cursorHeightDp(
                                 fontScale = fontScale,
@@ -175,7 +178,8 @@ fun InlineDocumentEditor(
                     }
                 }
             },
-            maxLines = Int.MAX_VALUE,
+            singleLine = textAlign == TextAlign.Center,
+            maxLines = if (textAlign == TextAlign.Center) 1 else Int.MAX_VALUE,
         )
     }
 }

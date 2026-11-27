@@ -101,6 +101,23 @@ class AttachmentReferencesTest {
     }
 
     @Test
+    fun centeredLineGetsItsOwnFullWidthEditableBlock() {
+        val body = "前文\n<center>居中这一行</center>\n后文"
+
+        val blocks = AttachmentReferences.documentBlocks(body)
+
+        assertEquals(
+            listOf("前文", "<center>居中这一行</center>", "后文"),
+            blocks.map(DocumentBodyBlock::text),
+        )
+        assertEquals(listOf(false, true, false), blocks.map(DocumentBodyBlock::centered))
+        assertEquals(
+            body,
+            blocks.joinToString("") { it.leadingNewlines + it.text + it.trailingNewlines },
+        )
+    }
+
+    @Test
     fun staleBlockBoundsDoNotBreakEditingAfterImageContentChanges() {
         val reference = AttachmentReferences.imageMarkdown(1, "图片.png")
         val body = "新开头\n$reference\n新结尾"

@@ -1,7 +1,12 @@
 package io.github.latticenotes.ui
 
 import org.junit.Assert.assertEquals
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.unit.sp
 import org.junit.Test
 
 class EditorTextMetricsTest {
@@ -51,6 +56,46 @@ class EditorTextMetricsTest {
                 fontScale = 1f,
                 fontSizeSp = 24f,
             ).value,
+            0.001f,
+        )
+    }
+
+    @Test
+    fun headingCursorDetectsFontSizeFromVisibleSpan() {
+        val text = AnnotatedString.Builder("标题").apply {
+            addStyle(
+                SpanStyle(
+                    color = Color.Black,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                ),
+                0,
+                2,
+            )
+        }.toAnnotatedString()
+
+        assertEquals(
+            24f,
+            EditorTextMetrics.cursorFontSizeSp(
+                visibleText = text,
+                originalText = "标题",
+                visibleOffset = 1,
+                originalOffset = 1,
+            ),
+            0.001f,
+        )
+    }
+
+    @Test
+    fun headingCursorFallsBackToOriginalHeadingMarkup() {
+        assertEquals(
+            24f,
+            EditorTextMetrics.cursorFontSizeSp(
+                visibleText = AnnotatedString("标题"),
+                originalText = "# 标题",
+                visibleOffset = 2,
+                originalOffset = 3,
+            ),
             0.001f,
         )
     }

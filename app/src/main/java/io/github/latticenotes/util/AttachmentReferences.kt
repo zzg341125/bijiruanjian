@@ -50,15 +50,65 @@ object AttachmentReferences {
 
     fun documentBlocks(body: String): List<DocumentBodyBlock> {
         val references = references(body)
-        if (references.isEmpty()) {
-            return listOf(textBlock(body, 0, body.length, "text-start"))
-        }
-
         val blocks = mutableListOf<DocumentBodyBlock>()
         var cursor = 0
         var textKey = "text-start"
+        var centerBlockCount = 0
+
+        fun appendTextBlocks(start: Int, end: Int, key: String) {
+            if (start == end) {
+                blocks += textBlock(body, start, end, key)
+                return
+            }
+            var groupStart = start
+            var normalGroupCount = 0
+            var lineStart = start
+            while (lineStart < end) {
+                val lineBreak = body.indexOf('\n', lineStart)
+                val lineEnd = if (lineBreak < 0 || lineBreak >= end) end else lineBreak
+                val blockEnd = if (lineBreak >= 0 && lineBreak < end) lineBreak + 1 else end
+                val line = body.substring(lineStart, lineEnd)
+                if (line.trim().startsWith("<center>", ignoreCase = true) &&
+                    line.trim().endsWith("</center>", ignoreCase = true)
+                ) {
+                    if (groupStart < lineStart) {
+                        val groupKey = if (normalGroupCount == 0) {
+                            key
+                        } else {
+                            "$key-normal-$normalGroupCount"
+                        }
+                        blocks += textBlock(body, groupStart, lineStart, groupKey)
+                        normalGroupCount++
+                    }
+                    centerBlockCount++
+                    blocks += textBlock(
+                        body = body,
+                        start = lineStart,
+                        end = blockEnd,
+                        key = "center-$centerBlockCount",
+                        centered = true,
+                    )
+                    groupStart = blockEnd
+                }
+                lineStart = blockEnd
+            }
+            if (groupStart < end) {
+                val groupKey = if (normalGroupCount == 0) {
+                    key
+                } else {
+                    "$key-normal-$normalGroupCount"
+                }
+                blocks += textBlock(body, groupStart, end, groupKey)
+            }
+        }
+
+        if (references.isEmpty()) {
+            appendTextBlocks(0, body.length, "text-start")
+            return blocks
+        }
+
         references.forEach { reference ->
-            blocks += textBlock(body, cursor, reference.range.first, textKey)
+            appendTextBlocks(cursor, reference.range.first, textKey)
             blocks += DocumentBodyBlock(
                 key = "image-${reference.attachmentId}",
                 start = reference.range.first,
@@ -68,7 +118,7 @@ object AttachmentReferences {
             cursor = reference.range.last + 1
             textKey = "text-after-${reference.attachmentId}"
         }
-        blocks += textBlock(body, cursor, body.length, textKey)
+        appendTextBlocks(cursor, body.length, textKey)
         return blocks
     }
 
@@ -160,6 +210,7 @@ object AttachmentReferences {
         start: Int,
         end: Int,
         key: String,
+        centered: Boolean = false,
     ): DocumentBodyBlock {
         val raw = body.substring(start, end)
         val leading = raw.takeWhile { it == '\n' }
@@ -173,6 +224,7 @@ object AttachmentReferences {
             text = content,
             leadingNewlines = leading,
             trailingNewlines = trailing,
+            centered = centered,
         )
     }
 }
@@ -204,6 +256,7 @@ data class DocumentBodyBlock(
     val leadingNewlines: String = "",
     val trailingNewlines: String = "",
     val imageId: Long? = null,
+    val centered: Boolean = false,
 ) {
     val isImage: Boolean
         get() = imageId != null

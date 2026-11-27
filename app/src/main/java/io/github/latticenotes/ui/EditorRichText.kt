@@ -24,8 +24,10 @@ internal object DocumentMarkupFormatter {
     private val todoPrefix = Regex("^-\\s+\\[[ xX]]\\s+")
     private val quotePrefix = Regex("^>\\s+")
     private val colorOpen = Regex("<color:#[0-9A-Fa-f]{6}>")
-    private val colorClose = Regex("</color>")
-    private val colorTag = Regex("<color:#[0-9A-Fa-f]{6}>|</color>")
+    private val protectedSyntax = Regex(
+        "</?center>|\\*\\*|^#{1,6}\\s+|^>\\s+|^[-*]\\s+(?:\\[[ xX]]\\s+)?",
+        setOf(RegexOption.MULTILINE, RegexOption.IGNORE_CASE),
+    )
 
     fun apply(
         text: String,
@@ -51,52 +53,87 @@ internal object DocumentMarkupFormatter {
         val start = selectionStart.coerceIn(0, text.length)
         val end = selectionEnd.coerceIn(start, text.length)
         if (start == end) return FormattedDocument(text, start, end)
-        val enclosingColor = enclosingColorSpan(text, start, end)
-        val replaceStart = enclosingColor?.first ?: start
-        val replaceEnd = (enclosingColor?.last ?: (end - 1)) + 1
-        val selected = text.substring(replaceStart, replaceEnd)
-            .replace(colorTag, "")
-        if (selected.isBlank()) return FormattedDocument(text, start, end)
-        val opening = "<color:${colorHex.uppercase()}>"
-        val replacement = "$opening$selected</color>"
-        return FormattedDocument(
-            text = text.replaceRange(replaceStart, replaceEnd, replacement),
-            selectionStart = replaceStart + opening.length,
-            selectionEnd = replaceStart + opening.length + selected.length,
-        )
+        return recolorVisibleRange(text, start, end, colorHex)
     }
 
-    private fun enclosingColorSpan(text: String, start: Int, end: Int): IntRange? {
-        colorOpen.findAll(text, 0)
-            .takeWhile { it.range.first < start }
-            .toList()
-            .asReversed()
-            .forEach { opening ->
-                val contentStart = opening.range.last + 1
-                if (start < contentStart) return@forEach
-                val closing = matchingColorClose(text, contentStart) ?: return@forEach
-                if (end <= closing.first) {
-                    return opening.range.first..closing.last
-                }
-            }
-        return null
-    }
-
-    private fun matchingColorClose(text: String, from: Int): IntRange? {
-        var depth = 1
-        val tags = sequence {
-            yieldAll(colorOpen.findAll(text, from))
-            yieldAll(colorClose.findAll(text, from))
-        }.sortedBy { it.range.first }
-        tags.forEach { tag ->
-            if (tag.value.startsWith("<color:")) {
-                depth++
+    private fun recolorVisibleRange(
+        text: String,
+        selectionStart: Int,
+        selectionEnd: Int,
+        colorHex: String,
+    ): FormattedDocument {
+        val normalizedColor = colorHex.uppercase()
+        val plain = StringBuilder()
+        val styles = mutableListOf<String?>()
+        val originalToPlain = IntArray(text.length + 1)
+        val colorStack = mutableListOf<String>()
+        var original = 0
+        while (original < text.length) {
+            originalToPlain[original] = plain.length
+            val opening = if (text.startsWith("<color:", original, ignoreCase = true)) {
+                colorOpen.matchAt(text, original)
             } else {
-                depth--
-                if (depth == 0) return tag.range
+                null
             }
+            if (opening != null) {
+                colorStack += "#" + opening.value
+                    .substringAfter("<color:#")
+                    .substringBefore(">")
+                    .uppercase()
+                while (original <= opening.range.last) {
+                    original++
+                    originalToPlain[original] = plain.length
+                }
+                continue
+            }
+            if (text.startsWith("</color>", original, ignoreCase = true)) {
+                if (colorStack.isNotEmpty()) colorStack.removeAt(colorStack.lastIndex)
+                repeat("</color>".length) {
+                    original++
+                    originalToPlain[original] = plain.length
+                }
+                continue
+            }
+            plain.append(text[original])
+            styles += colorStack.lastOrNull()
+            original++
+            originalToPlain[original] = plain.length
         }
-        return null
+        val plainStart = originalToPlain[selectionStart]
+        val plainEnd = originalToPlain[selectionEnd]
+        if (plainStart >= plainEnd) return FormattedDocument(text, selectionStart, selectionEnd)
+        val protected = BooleanArray(plain.length)
+        protectedSyntax.findAll(plain).forEach { match ->
+            for (index in match.range) protected[index] = true
+        }
+        protected.indices.forEach { index ->
+            if (protected[index]) styles[index] = null
+        }
+        for (index in plainStart until plainEnd) {
+            if (!protected[index]) styles[index] = normalizedColor
+        }
+
+        val output = StringBuilder()
+        var selectionStartOutput = -1
+        var selectionEndOutput = -1
+        var index = 0
+        while (index < plain.length) {
+            val style = styles[index]
+            val runStart = index
+            if (style != null) output.append("<color:$style>")
+            while (index < plain.length && styles[index] == style) {
+                if (index == plainStart) selectionStartOutput = output.length
+                output.append(plain[index])
+                index++
+                if (index == plainEnd) selectionEndOutput = output.length
+            }
+            if (style != null) output.append("</color>")
+        }
+        return FormattedDocument(
+            text = output.toString(),
+            selectionStart = selectionStartOutput,
+            selectionEnd = selectionEndOutput,
+        )
     }
 
     private fun toggleLineFormat(
@@ -385,7 +422,10 @@ internal class MarkdownVisualTransformation(
             if (visualLineStart < visualLineEnd) {
                 if (analysis.heading) {
                     spanStyles += AnnotatedString.Range(
-                        SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.ExtraBold),
+                        SpanStyle(
+                            fontSize = EditorTextMetrics.headingFontSize,
+                            fontWeight = FontWeight.ExtraBold,
+                        ),
                         visualLineStart,
                         visualLineEnd,
                     )
